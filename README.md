@@ -1,8 +1,11 @@
 # Sargon
 
-Sargon is a Docker authorization plugin that controls container creation.
-It decides whether privileged containers can be created and checks whether
-it is permitted to bind the requested host file system directories.
+Sargon is a docker authorization plugin that controls container creation.
+It enables the administrator to excercise control over the containers that
+users are allowed to create and decide whether to permit creation of
+privileged containers, what parts of the host file system can be visible
+to containers via bind or volume mechanism, what memory limits to apply,
+etc.
 
 ## Building
 
@@ -55,6 +58,24 @@ The following keywords are recognized:
 * `allowpriv`
 
   Allow the use of privileged containers. Defaults to `false`.
+
+* `MaxMemory`
+
+  Maximum memory limit allowed to use when starting containers. Users
+  will have to use --memory=N option with N lower than or equal to this
+  value.
+
+* `MaxKernelMemory`
+
+  Ditto for kernel memory limit (see the `--kernel-memory` option to
+  `docker run`).
+
+* `AllowCapAdd`
+
+  A list of Linux capabilities that are allowed for use in `--cap-add`
+  option. See capabilities(7) for a list of capability names. Names can
+  be listed with or without the `CAP_` prefix. Name matching is case-
+  insensitive.
   
 ## Example
 

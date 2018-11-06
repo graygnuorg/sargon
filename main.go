@@ -19,6 +19,18 @@ type Config struct {
 	Pidfile   string `json:"pidfile"`
 	Mount     []string `json:"mount"`
 	AllowPriv bool `json:"allowpriv"`
+	MaxMemory int64 `json:"maxmemory"`
+	MaxKernelMemory int64 `json:"maxkernelmemorylimit"`
+	AllowCapAdd []string `json:"allowcapadd"`
+	CapAddMap map[string]bool
+}
+
+func normalizeCap(cap string) string {
+	cap = strings.ToUpper(cap)
+	if !strings.HasPrefix(cap, "CAP_") {
+		cap = "CAP_" + cap
+	}
+	return cap
 }
 
 func readConfig(f string) Config {
@@ -30,6 +42,12 @@ func readConfig(f string) Config {
 	c := Config{ Pidfile: "/var/run/sargon.pid",
 		     AllowPriv: false }
 	json.Unmarshal(raw, &c)
+	if len(c.AllowCapAdd) > 0 {
+		c.CapAddMap = make(map[string]bool, len(c.AllowCapAdd))
+		for _, cap := range c.AllowCapAdd {
+			c.CapAddMap[normalizeCap(cap)] = true
+		}
+	}
 	return c;
 }
 
