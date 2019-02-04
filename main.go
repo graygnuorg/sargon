@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"strings"
 	"github.com/docker/go-plugins-helpers/authorization"
 	"github.com/sevlyar/go-daemon"
 	"log"
@@ -17,20 +16,10 @@ import (
 
 type Config struct {
 	Pidfile   string `json:"pidfile"`
-	Mount     []string `json:"mount"`
-	AllowPriv bool `json:"allowpriv"`
-	MaxMemory int64 `json:"maxmemory"`
-	MaxKernelMemory int64 `json:"maxkernelmemorylimit"`
-	AllowCapAdd []string `json:"allowcapadd"`
-	CapAddMap map[string]bool
-}
-
-func normalizeCap(cap string) string {
-	cap = strings.ToUpper(cap)
-	if !strings.HasPrefix(cap, "CAP_") {
-		cap = "CAP_" + cap
-	}
-	return cap
+	LdapConf string `json:"ldapconf"`
+	LdapUser string `json:"ldapuser"`
+	LdapPass string `json:"ldappassword"`
+	AnonymousUser string `json:anonymoususer"`
 }
 
 func readConfig(f string) Config {
@@ -39,41 +28,40 @@ func readConfig(f string) Config {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
-	c := Config{ Pidfile: "/var/run/sargon.pid",
-		     AllowPriv: false }
-	json.Unmarshal(raw, &c)
-	if len(c.AllowCapAdd) > 0 {
-		c.CapAddMap = make(map[string]bool, len(c.AllowCapAdd))
-		for _, cap := range c.AllowCapAdd {
-			c.CapAddMap[normalizeCap(cap)] = true
-		}
+	c := Config{
+		Pidfile: "/var/run/sargon.pid",
+		LdapConf: "/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf",
+		AnonymousUser: "ANONYMOUS",
 	}
+	json.Unmarshal(raw, &c)
 	return c;
 }
 
 var (
 	config Config
+	debug_mode bool
 )
+
+func debug(f string, args ...interface{}) {
+	if (debug_mode) {
+		log.Printf("[DEBUG] " + f, args...)
+	}
+}
 
 func main() {
 	var config_file string;
 	var foreground bool;
 
 	flag.BoolVar(&foreground, "foreground", false,
-			"remain in foreground")
+		"remain in foreground")
+	flag.BoolVar(&debug_mode, "debug", false,
+		"verbose debugging")
+
 	flag.StringVar(&config_file, "config", "/etc/docker/sargon.json",
 	                "Sargon configuration file")
 	flag.Parse()
 
 	config = readConfig(config_file)
-	for i, x := range config.Mount {
-		if !strings.HasSuffix(x, "/") {
-			config.Mount[i] = x + "/"
-		}
-	}
-	if (len(config.Mount) == 0) {
-		log.Println("warning: no mount points configured")
-	}
 
 	if !foreground {
 		logwrt, e := syslog.New(syslog.LOG_DAEMON|syslog.LOG_NOTICE,

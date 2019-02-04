@@ -1,0 +1,7 @@
+.emacs*
+/Gopkg.lock
+/Gopkg.toml
+*~
+sargon
+/tmp/
+/vendor/

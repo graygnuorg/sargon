@@ -33,6 +33,10 @@ recognized:
   Read configuration from *FILE* instead of the default
   `/etc/docker/sargon.json`
 
+* `-debug`
+
+  Enable verbose debugging output
+
 In order to configure docker to consult sargon when creating new containers,
 add the following option to its command line:
 
@@ -49,44 +53,25 @@ The following keywords are recognized:
 
   Name of the PID file. Defaults to `/var/run/sargon.pid`.
 
-* `mount`
+* `LdapConf`
 
-  A list of directories on the file system, from which it is allowed
-  to bind subdirectories to the containers being created. By default
-  it is empty, meaning that binds are not allowed at all.
+  Colon-separated list of LDAP configuration files to look for. The first of
+  them that exists will be read. Default is
+  `/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf`
 
-* `allowpriv`
+* `LdapUser`
 
-  Allow the use of privileged containers. Defaults to `false`.
+  Bind to LDAP using this DN. Defaults to empty string.
 
-* `MaxMemory`
+* `LdapPass`
 
-  Maximum memory limit allowed to use when starting containers. Users
-  will have to use --memory=N option with N lower than or equal to this
-  value.
+  Bind to LDAP with this password. Defaults to empty string.
 
-* `MaxKernelMemory`
+* `AnonymousUser`
 
-  Ditto for kernel memory limit (see the `--kernel-memory` option to
-  `docker run`).
+  If docker connection is not authenticated, use this string as the user name.
 
-* `AllowCapAdd`
+## LDAP object
 
-  A list of Linux capabilities that are allowed for use in `--cap-add`
-  option. See capabilities(7) for a list of capability names. Names can
-  be listed with or without the `CAP_` prefix. Name matching is case-
-  insensitive.
-  
-## Example
-
-The following configuration allows users to bind only subdirectories located
-under `/var/lib/mounts` and `/mnt`:
-
-```json
-{
-    "pidfile":"/var/run/sargon.pid" ,
-    "mount":[ "/var/lib/mounts", "/mnt" ]
-}
-```
-
+FIXME
   
