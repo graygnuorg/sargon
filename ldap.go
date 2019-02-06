@@ -318,7 +318,6 @@ func FindUser (username string) (SargonACL, error) {
 	}
 	defer l.Close()
 
-	// FIXME: tls
 	if config.LdapTLS {
 		tlsconf, _ := NewTlsConfig(cf)
 

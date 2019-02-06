@@ -148,9 +148,6 @@ func realpath(s string) (string, error) {
 }
 
 func (ace SargonACE) MountIsAllowed(dir string) EvalResult {
-	if len(ace.Mount) == 0 {
-		return undef
-	}
 	for _, mp := range ace.Mount {
 		if strings.HasSuffix(mp, "/*") {
 			if strings.HasPrefix(dir, mp[0:len(mp)-1]) {
@@ -160,11 +157,11 @@ func (ace SargonACE) MountIsAllowed(dir string) EvalResult {
 			if mp == dir {
 				return accept
 			}
-		} else if mp + "/" == dir {
+		} else if mp == dir {
 			return accept
 		}
 	}
-	return reject
+	return undef
 }
 
 func (acl SargonACL) MountIsAllowed(dir string) (bool, string) {
