@@ -62,10 +62,18 @@ The following keywords are recognized:
 * `LdapUser`
 
   Bind to LDAP using this DN. Defaults to empty string.
+  This value overrides the `binddn` setting in `ldap.conf` file, which
+  is the preferred way of configuring bind DN.
 
 * `LdapPass`
 
   Bind to LDAP with this password. Defaults to empty string.
+  This value overrides the password obtained from the `bindpwfile`
+  setting in `ldap.conf` file.
+
+* `LdapTLS`
+
+  If `true`, start LDAP TLS session.
 
 * `AnonymousUser`
 

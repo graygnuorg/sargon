@@ -19,6 +19,7 @@ type Config struct {
 	LdapConf string `json:"ldapconf"`
 	LdapUser string `json:"ldapuser"`
 	LdapPass string `json:"ldappassword"`
+	LdapTLS bool `json:"ldaptls"`
 	AnonymousUser string `json:anonymoususer"`
 }
 
