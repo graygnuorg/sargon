@@ -1,19 +1,33 @@
 package main
 
 import (
+	"os"
+	"fmt"
 	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"strings"
 	"net/url"
 	"github.com/docker/go-plugins-helpers/authorization"
 	"github.com/docker/engine-api/types/container"
 )	
 
-type sargon struct {
+type Sargon struct {
+	Pidfile   string `json:"pidfile"`
+	LdapConf string `json:"ldapconf"`
+	LdapUser string `json:"ldapuser"`
+	LdapPass string `json:"ldappassword"`
+	LdapTLS bool `json:"ldaptls"`
+	AnonymousUser string `json:anonymoususer"`
 }
 
-func newPlugin() (*sargon, error) {
-	return &sargon{}, nil
+func (srg *Sargon) ReadConfig(f string) {
+	raw, err := ioutil.ReadFile(f)
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
+	json.Unmarshal(raw, srg)
 }
 
 type createRequest struct {
@@ -21,7 +35,7 @@ type createRequest struct {
 	HostConfig       *container.HostConfig
 }
 
-func (p *sargon) AuthZReq(req authorization.Request) authorization.Response {
+func (srg *Sargon) AuthZReq(req authorization.Request) authorization.Response {
 
 	uri, err := url.QueryUnescape(req.RequestURI)
 	if err != nil {
@@ -32,14 +46,14 @@ func (p *sargon) AuthZReq(req authorization.Request) authorization.Response {
 	uri = (strings.SplitN(uri,"?",2))[0];
 
 	if req.User == "" {
-		req.User = config.AnonymousUser
+		req.User = srg.AnonymousUser
 	}
 	
 	debug("checking %s request to %s from user %s\n",
               req.RequestMethod, uri, req.User)
 
 	action := GetAction(req.RequestMethod, uri)
-	acl, err := FindUser(req.User)
+	acl, err := srg.FindUser(req.User)
 	if err != nil {
 		return authorization.Response{Msg: "Autorization denied",
 			                      Err: err.Error()}
@@ -60,7 +74,7 @@ func (p *sargon) AuthZReq(req authorization.Request) authorization.Response {
 			return authorization.Response{Err: err.Error()}
 		}
 		
-		if res, msg := acl.AllowCreate(body, &config, req.User);
+		if res, msg := acl.AllowCreate(body, req.User);
 		   res == false {
 			debug("DENY: %s\n", msg)
 			return authorization.Response{Msg: msg}
@@ -70,7 +84,7 @@ func (p *sargon) AuthZReq(req authorization.Request) authorization.Response {
 	return authorization.Response{Allow: true}
 }
 
-func (p *sargon) AuthZRes(req authorization.Request) authorization.Response {
+func (srg *Sargon) AuthZRes(req authorization.Request) authorization.Response {
 	return authorization.Response{Allow: true}
 }
 

@@ -24,40 +24,37 @@ var (
 	ldapURIRe = regexp.MustCompile(`^(ldap[is]?)://((.+)(?::(.+))?)$`)
 )
 
-func ReadLDAPConf(filename string) (map[string]string, error) {
+type LdapConfig map[string]string
+
+func (lcf LdapConfig) Read(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer file.Close()
 
 	debug("reading file %s\n", filename)
 	scanner := bufio.NewScanner(file)
-	conf := make(map[string]string)
 	for scanner.Scan() {
 		s := scanner.Text()
 		if commentRe.FindStringSubmatch(s) != nil {
 			continue
 		}
 		if res := settingRe.FindStringSubmatch(s); res != nil {
-			conf[strings.ToLower(res[1])] = res[2]
+			lcf[strings.ToLower(res[1])] = res[2]
 		}
 	}
-	return conf, nil
+	return nil
 }
 
-func ReadLDAPConfPath() (map[string]string, error) {
-	for _, file := range strings.Split(config.LdapConf, `:`) {
-		ldapcf, err := ReadLDAPConf(file)
-		if ldapcf != nil {
-			return ldapcf, nil
-		} else if os.IsNotExist(err) {
-			continue
-		} else {
-			return nil, err
+func (lcf LdapConfig) ReadPath(path string) (err error) {
+	for _, file := range strings.Split(path, `:`) {
+		err = lcf.Read(file);
+		if err == nil || !os.IsNotExist(err) {
+			break
 		}
 	}
-	return make(map[string]string), nil
+	return
 }
 
 func uriToNetAddr(uri string) (net, address string, ssl bool) {
@@ -155,7 +152,15 @@ func LdapEntryToACE(entry *ldap.Entry) SargonACE {
 	return ace
 }
 
-func MatchHost(hostname, username string) bool {
+func matchStr(r bool) string {
+	if r {
+		return "MATCH!"
+	} else {
+		return "no match"
+	}
+}
+
+func MatchHost(hostname, username string) (result bool) {
 	debug("checking %s %s\n", hostname, username)
 	if myhostname, err := os.Hostname(); err == nil {
 		if (string(hostname[0]) == `+`) {
@@ -163,14 +168,14 @@ func MatchHost(hostname, username string) bool {
 			myhost := ar[0]
 			mydomain := strings.Join(ar[1:], ".")
 			debug("myhost=%s, mydomain=%s\n",myhost,mydomain)
-			return InNetgroup(string(hostname[1:]), myhost,
-				username, mydomain)
-		}
-		if strings.ToLower(hostname) == strings.ToLower(myhostname) {
-			return true
+			result = InNetgroup(string(hostname[1:]), myhost,
+					           username, mydomain)
+		} else {
+			result = strings.ToLower(hostname) == strings.ToLower(myhostname)
 		}
 	}
-	return false
+	debug("checking %s %s - %s\n", hostname, username, matchStr(result))
+	return 
 }
 
 func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) SargonACL {
@@ -194,7 +199,7 @@ func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) SargonACL {
 	return acl
 }
 
-func NewTlsConfig(cf map[string]string) (tlsconf *tls.Config, ok bool) {
+func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 	tlsconf = &tls.Config{}
 	ok = true
 
@@ -267,7 +272,6 @@ func NewTlsConfig(cf map[string]string) (tlsconf *tls.Config, ok bool) {
 				filename := filepath.Join(cacertdir, file.Name())
 				file, err := ioutil.ReadFile(filename)
 				if err == nil {
-					debug("LOADINGB")
 					if !tlsconf.RootCAs.AppendCertsFromPEM(file) {
 						log.Println("failed to load any certificates from " + filename)
 					}
@@ -290,9 +294,10 @@ func NewTlsConfig(cf map[string]string) (tlsconf *tls.Config, ok bool) {
 	return
 }
 
-func FindUser (username string) (SargonACL, error) {
+func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 	debug("Looking up user %s\n", username)
-	cf, err := ReadLDAPConfPath()
+	cf := LdapConfig{}
+	err := cf.ReadPath(srg.LdapConf)
 	if err != nil {
 		return nil, err
 	}
@@ -305,6 +310,7 @@ func FindUser (username string) (SargonACL, error) {
 
 	var l *ldap.Conn
 
+	debug("Connecting to LDAP at %s://%s", net, addr)
 	if ssl {
 		tlsconf, _ := NewTlsConfig(cf)
 		l, err = ldap.DialTLS(net, addr, tlsconf)
@@ -318,7 +324,7 @@ func FindUser (username string) (SargonACL, error) {
 	}
 	defer l.Close()
 
-	if config.LdapTLS {
+	if srg.LdapTLS {
 		tlsconf, _ := NewTlsConfig(cf)
 
 		err := l.StartTLS(tlsconf)
@@ -328,11 +334,11 @@ func FindUser (username string) (SargonACL, error) {
 		}
 	}
 
-	user := config.LdapUser
+	user := srg.LdapUser
 	if user == "" {
 		user = cf["binddn"]
 	}
-	passwd := config.LdapPass
+	passwd := srg.LdapPass
 	if passwd == "" {
 		if pwfile := cf["bindpwfile"]; pwfile != "" {
 			pw, err := ioutil.ReadFile(pwfile)
@@ -347,7 +353,7 @@ func FindUser (username string) (SargonACL, error) {
 
 	err = l.Bind(user, passwd)
 	if err != nil {
-		log.Println("can't bind as " + config.LdapUser +
+		log.Println("can't bind as " + srg.LdapUser +
 			    ": " + err.Error())
 		return nil, err
 	}

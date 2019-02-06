@@ -153,10 +153,6 @@ func (ace SargonACE) MountIsAllowed(dir string) EvalResult {
 			if strings.HasPrefix(dir, mp[0:len(mp)-1]) {
 				return accept
 			}
-		} else if strings.HasSuffix(mp, "/") {
-			if mp == dir {
-				return accept
-			}
 		} else if mp == dir {
 			return accept
 		}
@@ -248,8 +244,7 @@ func Resolution(b bool) string {
 	}
 }
 
-func (acl SargonACL) AllowCreate(body *createRequest, config *Config,
-                                 username string) (bool, string) {
+func (acl SargonACL) AllowCreate(body *createRequest, username string) (bool, string) {
 	// Check if privileged containers are allowed
 	if body.HostConfig.Privileged {
 		res, id := acl.CreatePrivilegedIsAllowed()

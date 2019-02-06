@@ -1,10 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"flag"
-	"encoding/json"
-	"io/ioutil"
 	"os"
 	"github.com/docker/go-plugins-helpers/authorization"
 	"github.com/sevlyar/go-daemon"
@@ -14,32 +11,7 @@ import (
 	"syscall"
 )
 
-type Config struct {
-	Pidfile   string `json:"pidfile"`
-	LdapConf string `json:"ldapconf"`
-	LdapUser string `json:"ldapuser"`
-	LdapPass string `json:"ldappassword"`
-	LdapTLS bool `json:"ldaptls"`
-	AnonymousUser string `json:anonymoususer"`
-}
-
-func readConfig(f string) Config {
-	raw, err := ioutil.ReadFile(f)
-	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
-	}
-	c := Config{
-		Pidfile: "/var/run/sargon.pid",
-		LdapConf: "/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf",
-		AnonymousUser: "ANONYMOUS",
-	}
-	json.Unmarshal(raw, &c)
-	return c;
-}
-
 var (
-	config Config
 	debug_mode bool
 	trace_mode bool
 )
@@ -71,7 +43,12 @@ func main() {
 	                "Sargon configuration file")
 	flag.Parse()
 
-	config = readConfig(config_file)
+	sargon := &Sargon{
+		Pidfile: "/var/run/sargon.pid",
+		LdapConf: "/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf",
+		AnonymousUser: "ANONYMOUS",
+	}
+	sargon.ReadConfig(config_file)
 
 	if !foreground {
 		logwrt, e := syslog.New(syslog.LOG_DAEMON|syslog.LOG_NOTICE,
@@ -81,7 +58,7 @@ func main() {
 		}
 		log.SetOutput(logwrt)
 		ctx := &daemon.Context{
-			PidFileName: config.Pidfile,
+			PidFileName: sargon.Pidfile,
 			PidFilePerm: 0644,
 			WorkDir: "/",
 			Umask: 027,
@@ -104,21 +81,16 @@ func main() {
 		      syscall.SIGTERM,
 		      syscall.SIGQUIT)
 	
-	go worker()
+	go worker(sargon)
 	
 	_ = <-signal_chan
-	os.Remove(config.Pidfile)
+	os.Remove(sargon.Pidfile)
 	log.Println("normal shutdown")
 	os.Exit(0)
-}
+} 
 
-func worker() {
-	sargon, err := newPlugin()
-	if err != nil {
-		log.Panic(err.Error())
-	}
-
-	h := authorization.NewHandler(sargon)
+func worker(srg *Sargon) {
+	h := authorization.NewHandler(srg)
 	if err := h.ServeUnix("sargon", 0); err != nil {
 		log.Panic(err.Error())
 	}
