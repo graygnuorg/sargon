@@ -7,6 +7,8 @@ privileged containers, what parts of the host file system can be visible
 to containers via bind or volume mechanism, what memory limits to apply,
 etc.
 
+User privileges are kept in LDAP.
+
 ## Building
 
 After cloning, change to the source directory and run
@@ -46,7 +48,7 @@ add the following option to its command line:
 
 ## Configuration  
 
-Sargon configuration is kept in JSON format in file `/etc/docker/sargon`.
+Sargon configuration is kept in JSON format in file `/etc/docker/sargon.json`.
 The following keywords are recognized:
 
 * `pidfile`
@@ -79,7 +81,487 @@ The following keywords are recognized:
 
   If docker connection is not authenticated, use this string as the user name.
 
-## LDAP object
+## The `ldap.conf` file
 
-FIXME
+After reading its main configuration file, *sargon* scans the LDAP
+configuration path (see the `LdapConf` variable above). The first file that
+exists and is readable is then read. The format of the file is described in
+detail in [ldap.conf(5)](https://www.openldap.org/software/man.cgi?query=ldap.conf).
+The following keywords are recognized:
+
+* `URI` ldap[si]://[name[:port]] 
+  URI of an LDAP server to which *sargon* should connect.
   
+* `BASE` _base_
+  Specifies the default base DN to use when performing ldap queries.
+  
+* `BINDDN` _dn_
+  Specifies the default bind DN to use when performing ldap operations.
+
+* `BINDPWFILE` _filename_
+  Use complete contents of _filename_ as the password for simple
+  authentication.
+
+* `TLS_CACERT` _filename_
+  Specifies the file that contains certificates for all of the Certificate
+  Authorities the client will recognize.
+  
+* `TLS_CACERTDIR` _dirname_
+  Specifies  the path of a directory that contains Certificate Authority
+  certificates in separate individual files.
+  The `TLS_CACERT` is always used before `TLS_CACERTDIR`.
+  
+* `TLS_CERT` _filename_
+  Specifies the file that contains the client certificate.
+
+* `TLS_KEY` _filename_
+  Specifies the file that contains the private key that matches the
+  certificate stored in the TLS_CERT file.
+  
+* `TLS_RANDFILE` _filename_
+  Specifies the file to obtain random bits from, instead of the default
+  `/dev/urandom` or `/dev/random`.
+  
+* `TLS_REQCERT` _level_
+  Specifies  what  checks to perform on server certificates in a TLS session,
+  if any. The _level_ is one of: `never`, `allow`, `try`, `demand`, or
+  `try`.
+  
+## ACLs
+
+Docker user privileges are defined in in the LDAP database in form of
+`sargonACL` objects. Each such object defines privileges for a set of
+users who performing a docker action on a set of servers. Each `sargonACL`
+object must have the `cn` attribute, uniquely identifying the object.
+It may also have one or more of the following attributes. Except as marked
+with _(single)_, multiple attribute instances are allowed.
+
+* `sargonUser`
+  User to whom this entry applies. If the value begins with a percent
+  sign, the rest of characters after it are treated as the name of a
+  user group and the entry applies to all users in this group.
+
+* `sargonHost`
+  Host on which this entry takes effect. If the value starts with a plus
+  sign, it is treated as the name of the NIS netgroup.
+  
+* `sargonAllow`
+  Allowed action. Argument is either one of the docker action keywords listed
+  below, or the word `ALL` (uppercase) matching all actions.
+  
+* `sargonDeny`
+  Denied action. Argument is either one of the docker action keywords listed
+  below, or the word `ALL` (uppercase) matching all actions. See below for
+  a detailed discussion of how `sargonAllow` and `sargonDeny` policies
+  operate.
+
+* `sargonOrder` (single)
+  An integer to order `sargonACL` entries.
+
+* `sargonMount`
+  Name of the directory on the host filesystem, which is allowed for bind
+  and mount operations.
+  
+* `sargonAllowPrivileged` (single)
+  The word `TRUE` if the users are allowed to create privileged containers.
+  `FALSE` otherwise.
+  
+* `sargonMaxMemory` (single)
+  Limit on memory usage. The value is an integer optionally suffixed with
+  `K`, `M`, or `G` (case-insensitive).
+  
+* `sargonMaxKernelMemory` (single)
+  Limit on kernel memory usage. The value is an integer optionally suffixed
+  with `K`, `M`, or `G` (case-insensitive).
+  
+* `sargonAllowCapability`
+  Name of the linux capability that is allowed to use with the `--cap-add`
+  docker option. See [capabilities(7)](http://man7.org/linux/man-pages/man7/capabilities.7.html), for a list of capability names.
+  Names listed in this attribute are case-insensitive. The `CAP_` prefix is
+  optional.
+
+To determin privileges of the requesting user, *sargon* uses the following
+algorithm:
+
+1. Create LDAP filter with the user name and the names of the groups the
+   user belongs to.
+   For example, if the requesting user name is `smt`, and his main and
+   supplementary groups are `staff`, `docker`, `wheel`, then the LDAP
+   filter will be:
+
+     `(&(objectClass=sargonACL)
+        (|(sargonUser=%s)
+          (sargonUser=ALL)
+          (sargonUser=%staff)
+          (sargonUser=%docker)
+          (sargonUser=%wheel)))`
+
+   (Notice, that it is split in multiple indented lines for readability).
+
+2. Execute LDAP query, get the response.
+
+3. Iterate over the returned `sargonACL` objects, selecting only those
+   whose `sargonHost` value matches the server hostname, or (if it starts
+   with `+`) the netgroup it refers to matches the `(host,user,domain)`
+   triplet.
+
+4. Sort the remaining entries by the value of their `sargonOrder` attribute
+   in ascending order.
+
+5. Start with the first returned object.
+
+6. If the requested docker action is explicitely listed in one of its
+   `sargonAllow` atribute, go to step 9.
+
+7. Otherwise, if either the requested action or the meta-action `ALL`
+   is listed in one of the objects's `sargonDeny` attribute, go to step
+   16.
+
+8. Advance to the next object, and restart from step 6.
+
+9. Unless the requested action is `ContainerCreate`, go to step 15.
+
+10. If privileges container creation is requested:
+    If `sargonAllowPrivileged` is `FALSE`, then go to 16.
+    Otherwise, advance to the next step.
+
+11. If any additional linux capabilities are requested, check if they
+    are listed in `sargonAllowCapability` attributes. If any of them is
+    not, go to step 16.
+
+12. Check requested binds and mounts. For each source directory, check
+    it against each `sargonMount` attribute.  If it matches the attribute
+    exactly, or if the attribute's value ends with a `/*` and the source
+    directory prefix matches the value, then the mount is allowed.
+    Otherwise, go to 16.
+
+13. If the requested maximum memory is greater than the value of the
+    `sargonMaxMemory` attribute, go to 16.
+
+14. If the requested maximum kernel memory is greater than the value of the
+    `sargonMaxKernelMemory` attribute, go to 16.
+
+15. Success. Authorize the request.
+
+16. Failure. Deny the request.
+
+## Actions
+
+The following values can be used in `sargonAllow` and `sargonDeny` attributes:
+
+* `BuildPrune`
+  Delete builder cache.
+
+* `ConfigCreate`
+  Create a config.
+
+* `ConfigDelete`
+  Delete a config.
+
+* `ConfigInspect`
+  Inspect a config.
+
+* `ConfigList`
+  List configs.
+
+* `ConfigUpdate`
+  Update a config.
+
+* `ContainerArchive`
+  Get an archive of a filesystem resource in a container.
+
+* `ContainerArchiveInfo`
+  Get information about files in a container.
+
+* `ContainerAttach`
+  Attach to a container.
+
+* `ContainerAttachWebsocket`
+  Attach to a container via a websocket.
+
+* `ContainerChanges`
+  Get changes on a container’s filesystem.
+
+* `ContainerCreate`
+  Create a container.
+
+* `ContainerDelete`
+  Remove a container.
+
+* `ContainerExec`
+  Create an exec instance.
+
+* `ContainerExport`
+  Export a container.
+
+* `ContainerInspect`
+  Inspect a container.
+
+* `ContainerKill`
+  Kill a container.
+
+* `ContainerList`
+  List containers.
+
+* `ContainerLogs`
+  Get container logs.
+
+* `ContainerPause`
+  Pause a container.
+
+* `ContainerPrune`
+  Delete stopped containers.
+
+* `ContainerRename`
+  Rename a container.
+
+* `ContainerResize`
+  Resize a container TTY.
+
+* `ContainerRestart`
+  Restart a container.
+
+* `ContainerStart`
+  Start a container.
+
+* `ContainerStats`
+  Get container stats based on resource usage.
+
+* `ContainerStop`
+  Stop a container.
+
+* `ContainerTop`
+  List processes running inside a container.
+
+* `ContainerUnpause`
+  Unpause a container.
+
+* `ContainerUpdate`
+  Update a container.
+
+* `ContainerWait`
+  Wait for a container.
+
+* `DistributionInspect`
+  Get image information from the registry.
+
+* `ExecInspect`
+  Inspect an exec instance.
+
+* `ExecResize`
+  Resize an exec instance.
+
+* `ExecStart`
+  Start an exec instance.
+
+* `GetPluginPrivileges`
+  Get plugin privileges.
+
+* `ImageBuild`
+  Build an image.
+
+* `ImageCommit`
+  Create a new image from a container.
+
+* `ImageCreate`
+  Create an image.
+
+* `ImageDelete`
+  Remove an image.
+
+* `ImageGet`
+  Export an image.
+
+* `ImageGetAll`
+  Export several images.
+
+* `ImageHistory`
+  Get the history of an image.
+
+* `ImageInspect`
+  Inspect an image.
+
+* `ImageList`
+  List Images.
+
+* `ImageLoad`
+  Import images.
+
+* `ImagePrune`
+  Delete unused images.
+
+* `ImagePush`
+  Push an image.
+
+* `ImageSearch`
+  Search images.
+
+* `ImageTag`
+  Tag an image.
+
+* `NetworkConnect`
+  Connect a container to a network.
+
+* `NetworkCreate`
+  Create a network.
+
+* `NetworkDelete`
+  Remove a network.
+
+* `NetworkDisconnect`
+  Disconnect a container from a network.
+
+* `NetworkInspect`
+  Inspect a network.
+
+* `NetworkList`
+  List networks.
+
+* `NetworkPrune`
+  Delete unused networks.
+
+* `NodeDelete`
+  Delete a node.
+
+* `NodeInspect`
+  Inspect a node.
+
+* `NodeList`
+  List nodes.
+
+* `NodeUpdate`
+  Update a node.
+
+* `PluginCreate`
+  Create a plugin.
+
+* `PluginDelete`
+  Remove a plugin.
+
+* `PluginDisable`
+  Disable a plugin.
+
+* `PluginEnable`
+  Enable a plugin.
+
+* `PluginInspect`
+  Inspect a plugin.
+
+* `PluginList`
+  List plugins.
+
+* `PluginPull`
+  Install a plugin.
+
+* `PluginPush`
+  Push a plugin.
+
+* `PluginSet`
+  Configure a plugin.
+
+* `PluginUpgrade`
+  Upgrade a plugin.
+
+* `PutContainerArchive`
+  Extract an archive of files or folders to a directory in a container.
+
+* `SecretCreate`
+  Create a secret.
+
+* `SecretDelete`
+  Delete a secret.
+
+* `SecretInspect`
+  Inspect a secret.
+
+* `SecretList`
+  List secrets.
+
+* `SecretUpdate`
+  Update a Secret.
+
+* `ServiceCreate`
+  Create a service.
+
+* `ServiceDelete`
+  Delete a service.
+
+* `ServiceInspect`
+  Inspect a service.
+
+* `ServiceList`
+  List services.
+
+* `ServiceLogs`
+  Get service logs.
+
+* `ServiceUpdate`
+  Update a service.
+
+* `Session`
+  Initialize interactive session.
+
+* `SwarmInit`
+  Initialize a new swarm.
+
+* `SwarmInspect`
+  Inspect swarm.
+
+* `SwarmJoin`
+  Join an existing swarm.
+
+* `SwarmLeave`
+  Leave a swarm.
+
+* `SwarmUnlock`
+  Unlock a locked manager.
+
+* `SwarmUnlockkey`
+  Get the unlock key.
+
+* `SwarmUpdate`
+  Update a swarm.
+
+* `SystemAuth`
+  Check auth configuration.
+
+* `SystemDataUsage`
+  Get data usage information.
+
+* `SystemEvents`
+  Monitor events.
+
+* `SystemInfo`
+  Get system information.
+
+* `SystemPing`
+  Ping.
+
+* `SystemVersion`
+  Get version.
+
+* `TaskInspect`
+  Inspect a task.
+
+* `TaskList`
+  List tasks.
+
+* `TaskLogs`
+  Get task logs.
+
+* `VolumeCreate`
+  Create a volume.
+
+* `VolumeDelete`
+  Remove a volume.
+
+* `VolumeInspect`
+  Inspect a volume.
+
+* `VolumeList`
+  List volumes.
+
+* `VolumePrune`
+  Delete unused volumes.
+
+
