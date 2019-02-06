@@ -4,14 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
-	//"regexp"
-	//"path/filepath"
 	"net/url"
 	"github.com/docker/go-plugins-helpers/authorization"
 	"github.com/docker/engine-api/types/container"
-	//"github.com/docker/engine-api/types/mount"
-	//"log"
-	//"fmt"
 )	
 
 type sargon struct {
@@ -52,7 +47,8 @@ func (p *sargon) AuthZReq(req authorization.Request) authorization.Response {
 
 	debug("checking if action %s is allowed\n", action)
 	ok, id := acl.ActionIsAllowed(action)
-	debug("action %s is %s by %s\n", action, Resolution(ok), id)
+	trace("%s: action %s is %s by %s\n",
+	      req.User, action, Resolution(ok), id)
 	if !ok {
 		return authorization.Response{Msg: "Action not allowed"}
 	}
@@ -64,12 +60,13 @@ func (p *sargon) AuthZReq(req authorization.Request) authorization.Response {
 			return authorization.Response{Err: err.Error()}
 		}
 		
-		if res, msg := acl.AllowCreate(body, &config); res == false {
+		if res, msg := acl.AllowCreate(body, &config, req.User);
+		   res == false {
 			debug("DENY: %s\n", msg)
 			return authorization.Response{Msg: msg}
 	 	}
 	}
-	
+
 	return authorization.Response{Allow: true}
 }
 

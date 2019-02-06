@@ -251,12 +251,13 @@ func Resolution(b bool) string {
 	}
 }
 
-func (acl SargonACL) AllowCreate(body *createRequest, config *Config) (bool, string) {
+func (acl SargonACL) AllowCreate(body *createRequest, config *Config,
+                                 username string) (bool, string) {
 	// Check if privileged containers are allowed
 	if body.HostConfig.Privileged {
 		res, id := acl.CreatePrivilegedIsAllowed()
-		debug("privileged container creation is %s by %s\n",
-			Resolution(res), id)
+		trace("%s: privileged container creation is %s by %s\n",
+		      username,	Resolution(res), id)
 		if ! res {
 			return false, "you are not allowed to create privileged containers"
 		}
@@ -265,8 +266,8 @@ func (acl SargonACL) AllowCreate(body *createRequest, config *Config) (bool, str
 	// Check capabilities
 	for _, cap := range body.HostConfig.CapAdd {
 		res, id := acl.CapIsAllowed(cap)
-		debug("adding capability %s is %s by %s\n",
-			cap, Resolution(res), id)
+		trace("%s: adding capability %s is %s by %s\n",
+		      username,	cap, Resolution(res), id)
 		if ! res {
 			return false, "capability " + cap + " is not allowed"
 		}
@@ -276,8 +277,8 @@ func (acl SargonACL) AllowCreate(body *createRequest, config *Config) (bool, str
 	for _, b := range body.HostConfig.Binds {
 		a := strings.SplitN(b, ":", 2)
 		res, id := acl.MountIsAllowed(a[0])
-		debug("binding to %s is %s by %s\n",
-			a[0], Resolution(res), id)
+		trace("%s: binding to %s is %s by %s\n",
+		      username, a[0], Resolution(res), id)
 		if ! res {
 			return false, "mounting " + a[0] + " is not allowed"
 		}
@@ -287,8 +288,8 @@ func (acl SargonACL) AllowCreate(body *createRequest, config *Config) (bool, str
 	for _, m := range body.HostConfig.Mounts {
 		if m.Type == mount.TypeBind {
 			res, id := acl.MountIsAllowed(m.Source)
-			debug("mounting %s is %s by %s\n",
-				m.Source, Resolution(res), id)
+			trace("%s: mounting %s is %s by %s\n",
+			      username, m.Source, Resolution(res), id)
 			if ! res {
 				return false, "mounting " + m.Source + " is not allowed"
 			}
@@ -297,15 +298,15 @@ func (acl SargonACL) AllowCreate(body *createRequest, config *Config) (bool, str
 	
 	// Check requested memory sizes
 	ok, lim, id := acl.CheckMaxMemory("sargonMaxMemory", body.HostConfig.Memory)
-	debug("MaxMemory=%d is %s by %s\n",
-		body.HostConfig.Memory, Resolution(ok), id)
+	trace("%s: setting MaxMemory=%d is %s by %s\n",
+	      username, body.HostConfig.Memory, Resolution(ok), id)
 	if !ok {
 		return false, "memory limit must be lower than or equal to " + fmt.Sprintf("%v",lim)
 	}
 
 	ok, lim, id = acl.CheckMaxMemory("sargonMaxKernelMemory", body.HostConfig.KernelMemory)
-	debug("MaxKernelMemory=%d is %s by %s\n",
-		body.HostConfig.Memory, Resolution(ok), id)
+	trace("%s: MaxKernelMemory=%d is %s by %s\n",
+	      username, body.HostConfig.Memory, Resolution(ok), id)
 	if !ok {
 		return false, "kernel memory limit must be lower than or equal to " + fmt.Sprintf("%v",lim)
         }

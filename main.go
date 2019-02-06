@@ -40,11 +40,18 @@ func readConfig(f string) Config {
 var (
 	config Config
 	debug_mode bool
+	trace_mode bool
 )
 
 func debug(f string, args ...interface{}) {
 	if (debug_mode) {
 		log.Printf("[DEBUG] " + f, args...)
+	}
+}
+
+func trace(f string, args ...interface{}) {
+	if (trace_mode || debug_mode) {
+		log.Printf("[TRACE] " + f, args...)
 	}
 }
 
@@ -55,6 +62,8 @@ func main() {
 	flag.BoolVar(&foreground, "foreground", false,
 		"remain in foreground")
 	flag.BoolVar(&debug_mode, "debug", false,
+		"verbose debugging")
+	flag.BoolVar(&trace_mode, "trace", false,
 		"verbose debugging")
 
 	flag.StringVar(&config_file, "config", "/etc/docker/sargon.json",

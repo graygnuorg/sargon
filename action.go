@@ -13,7 +13,7 @@ type endpoint struct {
 // Table of endpoints, generated from
 //   https://docs.docker.com/engine/api/v1.39/swagger.yaml
 var endpoints = []endpoint{
-        { path: regexp.MustCompile(`^/v\d+\.\d+/_ping`),
+        { path: regexp.MustCompile(`^/_ping`),
           method: "GET",
           action: "SystemPing" },
         { path: regexp.MustCompile(`^/v\d+\.\d+/auth`),
