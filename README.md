@@ -35,6 +35,9 @@ recognized:
   Read configuration from *FILE* instead of the default
   `/etc/docker/sargon.json`
 
+* `-trace`
+  Trace ACL entries and their effect.
+
 * `-debug`
 
   Enable verbose debugging output
@@ -89,40 +92,50 @@ exists and is readable is then read. The format of the file is described in
 detail in [ldap.conf(5)](https://www.openldap.org/software/man.cgi?query=ldap.conf).
 The following keywords are recognized:
 
-* `URI` ldap[si]://[name[:port]] 
+* `URI` ldap[si]://[name[:port]]
+
   URI of an LDAP server to which *sargon* should connect.
   
 * `BASE` _base_
+
   Specifies the default base DN to use when performing ldap queries.
   
 * `BINDDN` _dn_
+
   Specifies the default bind DN to use when performing ldap operations.
 
 * `BINDPWFILE` _filename_
+
   Use complete contents of _filename_ as the password for simple
   authentication.
 
 * `TLS_CACERT` _filename_
+
   Specifies the file that contains certificates for all of the Certificate
   Authorities the client will recognize.
   
 * `TLS_CACERTDIR` _dirname_
+
   Specifies  the path of a directory that contains Certificate Authority
   certificates in separate individual files.
   The `TLS_CACERT` is always used before `TLS_CACERTDIR`.
   
 * `TLS_CERT` _filename_
+
   Specifies the file that contains the client certificate.
 
 * `TLS_KEY` _filename_
+
   Specifies the file that contains the private key that matches the
   certificate stored in the TLS_CERT file.
   
 * `TLS_RANDFILE` _filename_
+
   Specifies the file to obtain random bits from, instead of the default
   `/dev/urandom` or `/dev/random`.
   
 * `TLS_REQCERT` _level_
+
   Specifies  what  checks to perform on server certificates in a TLS session,
   if any. The _level_ is one of: `never`, `allow`, `try`, `demand`, or
   `try`.
@@ -137,44 +150,54 @@ It may also have one or more of the following attributes. Except as marked
 with _(single)_, multiple attribute instances are allowed.
 
 * `sargonUser`
+
   User to whom this entry applies. If the value begins with a percent
   sign, the rest of characters after it are treated as the name of a
   user group and the entry applies to all users in this group.
 
 * `sargonHost`
+
   Host on which this entry takes effect. If the value starts with a plus
   sign, it is treated as the name of the NIS netgroup.
   
 * `sargonAllow`
+
   Allowed action. Argument is either one of the docker action keywords listed
   below, or the word `ALL` (uppercase) matching all actions.
   
 * `sargonDeny`
+
   Denied action. Argument is either one of the docker action keywords listed
   below, or the word `ALL` (uppercase) matching all actions. See below for
   a detailed discussion of how `sargonAllow` and `sargonDeny` policies
   operate.
 
 * `sargonOrder` (single)
+
   An integer to order `sargonACL` entries.
 
 * `sargonMount`
+
   Name of the directory on the host filesystem, which is allowed for bind
   and mount operations.
   
 * `sargonAllowPrivileged` (single)
+
   The word `TRUE` if the users are allowed to create privileged containers.
   `FALSE` otherwise.
   
 * `sargonMaxMemory` (single)
+
   Limit on memory usage. The value is an integer optionally suffixed with
   `K`, `M`, or `G` (case-insensitive).
   
 * `sargonMaxKernelMemory` (single)
+
   Limit on kernel memory usage. The value is an integer optionally suffixed
   with `K`, `M`, or `G` (case-insensitive).
   
 * `sargonAllowCapability`
+
   Name of the linux capability that is allowed to use with the `--cap-add`
   docker option. See [capabilities(7)](http://man7.org/linux/man-pages/man7/capabilities.7.html), for a list of capability names.
   Names listed in this attribute are case-insensitive. The `CAP_` prefix is
