@@ -1,4 +1,4 @@
-package main
+package server
 //#include <netdb.h>
 import "C"
 

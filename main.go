@@ -6,32 +6,21 @@ import (
 	"github.com/docker/go-plugins-helpers/authorization"
 	"github.com/sevlyar/go-daemon"
 	"log"
-	"log/syslog"
 	"os/signal"
 	"syscall"
+	"sargon/diag"
+	"sargon/server"
 )
-
-var (
-	debug_mode bool
-	trace_mode bool
-)
-
-func debug(f string, args ...interface{}) {
-	if (debug_mode) {
-		log.Printf("[DEBUG] " + f, args...)
-	}
-}
-
-func trace(f string, args ...interface{}) {
-	if (trace_mode || debug_mode) {
-		log.Printf("[TRACE] " + f, args...)
-	}
-}
 
 func main() {
-	var config_file string;
-	var foreground bool;
-
+	var (
+		config_file string
+	        foreground bool
+		debug_mode bool
+		trace_mode bool
+		diag_flags int
+	)
+	
 	flag.BoolVar(&foreground, "foreground", false,
 		"remain in foreground")
 	flag.BoolVar(&debug_mode, "debug", false,
@@ -43,7 +32,14 @@ func main() {
 	                "Sargon configuration file")
 	flag.Parse()
 
-	sargon := &Sargon{
+	if debug_mode {
+		diag_flags |= diag.LogFlagDebug
+	}
+	if trace_mode {
+		diag_flags |= diag.LogFlagTrace
+	}
+	
+	sargon := &server.Sargon{
 		Pidfile: "/var/run/sargon.pid",
 		LdapConf: "/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf",
 		AnonymousUser: "ANONYMOUS",
@@ -51,12 +47,11 @@ func main() {
 	sargon.ReadConfig(config_file)
 
 	if !foreground {
-		logwrt, e := syslog.New(syslog.LOG_DAEMON|syslog.LOG_NOTICE,
-				        "sargon")
-		if e != nil {
-			log.Panic("can't create log writer: " + e.Error())
-		}
-		log.SetOutput(logwrt)
+		diag_flags |= diag.LogFlagSyslog
+	}
+	diag.Setup(diag_flags)
+
+	if !foreground {
 		ctx := &daemon.Context{
 			PidFileName: sargon.Pidfile,
 			PidFilePerm: 0644,
@@ -73,7 +68,7 @@ func main() {
 		}
 		defer ctx.Release()
 	}
-	log.Println("start up")
+	diag.Trace("start up")
 
 	signal_chan := make(chan os.Signal, 1)
 	signal.Notify(signal_chan,
@@ -85,13 +80,14 @@ func main() {
 	
 	_ = <-signal_chan
 	os.Remove(sargon.Pidfile)
-	log.Println("normal shutdown")
+	diag.Trace("normal shutdown")
 	os.Exit(0)
 } 
 
-func worker(srg *Sargon) {
+func worker(srg *server.Sargon) {
 	h := authorization.NewHandler(srg)
 	if err := h.ServeUnix("sargon", 0); err != nil {
-		log.Panic(err.Error())
+		diag.Error(err.Error())
+		os.Exit(1)
 	}
 }

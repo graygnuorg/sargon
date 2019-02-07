@@ -1,16 +1,14 @@
-package main
+package access
 
 import (
 	"strings"
 	"path/filepath"
-	"log"
-	"github.com/docker/engine-api/types/mount"
 	"strconv"
 	"errors"
-	"fmt"
+	"sargon/diag"
 )
 
-type SargonACE struct {
+type ACE struct {
 	Id string
 	User []string
 	Host []string
@@ -24,17 +22,18 @@ type SargonACE struct {
 	Order int
 }
 
-type SargonACL []SargonACE
-
-func NewSargonACL(n int) SargonACL {
-	return make(SargonACL, n)
-}
+type ACL []ACE
 
 const (
 	undef = iota
 	reject
 	accept
 )
+
+func NewSargonACL(n int) ACL {
+        return make(ACL, n)
+}
+
 
 type EvalResult int
 
@@ -55,11 +54,11 @@ func (e EvalResult) Defined() bool {
 }
 
 // Implementation of sort.Interface
-func (acl SargonACL) Len() int { return len(acl) }
-func (acl SargonACL) Swap(i, j int) { acl[i], acl[j] = acl[j], acl[i] }
-func (acl SargonACL) Less(i, j int) bool { return acl[i].Order < acl[j].Order }
+func (acl ACL) Len() int { return len(acl) }
+func (acl ACL) Swap(i, j int) { acl[i], acl[j] = acl[j], acl[i] }
+func (acl ACL) Less(i, j int) bool { return acl[i].Order < acl[j].Order }
 
-func (ace SargonACE) ActionIsAllowed(action string) (result EvalResult) {
+func (ace ACE) ActionIsAllowed(action string) (result EvalResult) {
 	for _, act := range ace.Allow {
 		if act == action {
 			return accept
@@ -78,7 +77,7 @@ func (ace SargonACE) ActionIsAllowed(action string) (result EvalResult) {
 	return
 }
 
-func (acl SargonACL) ActionIsAllowed(action string) (bool, string) {
+func (acl ACL) ActionIsAllowed(action string) (bool, string) {
 	for _, ace := range acl {
 		res := ace.ActionIsAllowed(action)
 		if res.Defined() {
@@ -88,7 +87,7 @@ func (acl SargonACL) ActionIsAllowed(action string) (bool, string) {
 	return false, "default policy"
 }
 
-func (ace SargonACE) CreatePrivilegedIsAllowed() EvalResult {
+func (ace ACE) CreatePrivilegedIsAllowed() EvalResult {
 	if ace.AllowPriv == nil {
 		return undef
 	}
@@ -98,7 +97,7 @@ func (ace SargonACE) CreatePrivilegedIsAllowed() EvalResult {
 	return reject
 }
 
-func (acl SargonACL) CreatePrivilegedIsAllowed() (bool, string) {
+func (acl ACL) CreatePrivilegedIsAllowed() (bool, string) {
 	for _, ace := range acl {
 		res := ace.CreatePrivilegedIsAllowed()
 		if res.Defined() {
@@ -116,7 +115,7 @@ func NormalizeCap(cap string) string {
 	return cap
 }
 
-func (ace SargonACE) CapIsAllowed(cap string) EvalResult {
+func (ace ACE) CapIsAllowed(cap string) EvalResult {
 	if len(ace.AllowCapability) == 0 {
 		return undef
 	}
@@ -128,7 +127,7 @@ func (ace SargonACE) CapIsAllowed(cap string) EvalResult {
 	return reject
 }
 
-func (acl SargonACL) CapIsAllowed(cap string) (bool, string) {
+func (acl ACL) CapIsAllowed(cap string) (bool, string) {
 	cap = NormalizeCap(cap)
 	for _, ace := range acl {
 		res := ace.CapIsAllowed(cap)
@@ -147,7 +146,7 @@ func realpath(s string) (string, error) {
         return filepath.Abs(path);
 }
 
-func (ace SargonACE) MountIsAllowed(dir string) EvalResult {
+func (ace ACE) MountIsAllowed(dir string) EvalResult {
 	for _, mp := range ace.Mount {
 		if strings.HasSuffix(mp, "/*") {
 			if strings.HasPrefix(dir, mp[0:len(mp)-1]) {
@@ -160,10 +159,10 @@ func (ace SargonACE) MountIsAllowed(dir string) EvalResult {
 	return undef
 }
 
-func (acl SargonACL) MountIsAllowed(dir string) (bool, string) {
+func (acl ACL) MountIsAllowed(dir string) (bool, string) {
 	mpt, err := realpath(dir)
 	if err != nil {
-		log.Printf("can't resolve path %s: %s\n", dir, err.Error())
+		diag.Error("can't resolve path %s: %s\n", dir, err.Error())
 		return false, "(bad path)"
 	}
 	for _, ace := range acl {
@@ -198,7 +197,7 @@ func ConvSize(str string) (int64, error) {
 	return n * int64(factor), nil
 }
 
-func (ace SargonACE) CheckMaxMemory(lim int64) EvalResult {
+func (ace ACE) CheckMaxMemory(lim int64) EvalResult {
 	if ace.MaxMemory == nil {
 		return undef
 	}
@@ -208,7 +207,7 @@ func (ace SargonACE) CheckMaxMemory(lim int64) EvalResult {
 	return accept
 }
 
-func (acl SargonACL) CheckMaxMemory(kw string, size int64) (bool, int64, string) {
+func (acl ACL) CheckMaxMemory(kw string, size int64) (bool, int64, string) {
 	for _, ace := range acl {
 		if res := ace.CheckMaxMemory(size); res.Defined() {
 			return res.Accept(), *ace.MaxMemory, ace.Id
@@ -217,7 +216,7 @@ func (acl SargonACL) CheckMaxMemory(kw string, size int64) (bool, int64, string)
 	return true, 0, "default policy"
 }
 
-func (ace SargonACE) CheckMaxKernelMemory(lim int64) EvalResult {
+func (ace ACE) CheckMaxKernelMemory(lim int64) EvalResult {
 	if ace.MaxKernelMemory == nil {
 		return undef
 	}
@@ -227,7 +226,7 @@ func (ace SargonACE) CheckMaxKernelMemory(lim int64) EvalResult {
 	return accept
 }
 
-func (acl SargonACL) CheckMaxKernelMemory(kw string, size int64) (bool, int64, string) {
+func (acl ACL) CheckMaxKernelMemory(kw string, size int64) (bool, int64, string) {
 	for _, ace := range acl {
 		if res := ace.CheckMaxKernelMemory(size); res.Defined() {
 			return res.Accept(), *ace.MaxKernelMemory, ace.Id
@@ -244,66 +243,5 @@ func Resolution(b bool) string {
 	}
 }
 
-func (acl SargonACL) AllowCreate(body *createRequest, username string) (bool, string) {
-	// Check if privileged containers are allowed
-	if body.HostConfig.Privileged {
-		res, id := acl.CreatePrivilegedIsAllowed()
-		trace("%s: privileged container creation is %s by %s\n",
-		      username,	Resolution(res), id)
-		if ! res {
-			return false, "you are not allowed to create privileged containers"
-		}
-	}
-
-	// Check capabilities
-	for _, cap := range body.HostConfig.CapAdd {
-		res, id := acl.CapIsAllowed(cap)
-		trace("%s: adding capability %s is %s by %s\n",
-		      username,	cap, Resolution(res), id)
-		if ! res {
-			return false, "capability " + cap + " is not allowed"
-		}
-	}
-
-	// Check binds (old API)
-	for _, b := range body.HostConfig.Binds {
-		a := strings.SplitN(b, ":", 2)
-		res, id := acl.MountIsAllowed(a[0])
-		trace("%s: binding to %s is %s by %s\n",
-		      username, a[0], Resolution(res), id)
-		if ! res {
-			return false, "mounting " + a[0] + " is not allowed"
-		}
-	}
-	
-	// Check mounts (new API)
-	for _, m := range body.HostConfig.Mounts {
-		if m.Type == mount.TypeBind {
-			res, id := acl.MountIsAllowed(m.Source)
-			trace("%s: mounting %s is %s by %s\n",
-			      username, m.Source, Resolution(res), id)
-			if ! res {
-				return false, "mounting " + m.Source + " is not allowed"
-			}
-		}
-	}
-	
-	// Check requested memory sizes
-	ok, lim, id := acl.CheckMaxMemory("sargonMaxMemory", body.HostConfig.Memory)
-	trace("%s: setting MaxMemory=%d is %s by %s\n",
-	      username, body.HostConfig.Memory, Resolution(ok), id)
-	if !ok {
-		return false, "memory limit must be lower than or equal to " + fmt.Sprintf("%v",lim)
-	}
-
-	ok, lim, id = acl.CheckMaxMemory("sargonMaxKernelMemory", body.HostConfig.KernelMemory)
-	trace("%s: MaxKernelMemory=%d is %s by %s\n",
-	      username, body.HostConfig.Memory, Resolution(ok), id)
-	if !ok {
-		return false, "kernel memory limit must be lower than or equal to " + fmt.Sprintf("%v",lim)
-        }
-
-	return true, "Ok"
-}
 
 	

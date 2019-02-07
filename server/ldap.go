@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"os"
@@ -9,13 +9,14 @@ import (
 	"gopkg.in/ldap.v2"
 	"crypto/tls"
 	"crypto/x509"
-	"log"
 	"fmt"
 	"sort"
 	"strconv"
 	"io/ioutil"
 	"path/filepath"
 	"errors"
+	"sargon/diag"
+	"sargon/access"
 )
 
 var (
@@ -33,7 +34,7 @@ func (lcf LdapConfig) Read(filename string) error {
 	}
 	defer file.Close()
 
-	debug("reading file %s\n", filename)
+	diag.Debug("reading file %s\n", filename)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		s := scanner.Text()
@@ -112,8 +113,8 @@ func FilterGroupCond(username string) string {
 	return group_cond
 }
 
-func LdapEntryToACE(entry *ldap.Entry) SargonACE {
-	var ace SargonACE
+func LdapEntryToACE(entry *ldap.Entry) access.ACE {
+	var ace access.ACE
 	ace.Id = entry.DN
 	for _, attr := range entry.Attributes {
 		switch attr.Name {
@@ -136,12 +137,12 @@ func LdapEntryToACE(entry *ldap.Entry) SargonACE {
 			ace.AllowPriv = new(bool)
 			*ace.AllowPriv = attr.Values[0] == "TRUE"
 		case `sargonMaxMemory`:
-			n, err := ConvSize(attr.Values[0])
+			n, err := access.ConvSize(attr.Values[0])
 			if err == nil {
 				ace.MaxMemory = &n
 			}
 		case `sargonMaxKernelMemory`:
-			n, err := ConvSize(attr.Values[0])
+			n, err := access.ConvSize(attr.Values[0])
 			if err == nil {
 				ace.MaxKernelMemory = &n
 			}
@@ -161,25 +162,25 @@ func matchStr(r bool) string {
 }
 
 func MatchHost(hostname, username string) (result bool) {
-	debug("checking %s %s\n", hostname, username)
+	diag.Debug("checking %s %s\n", hostname, username)
 	if myhostname, err := os.Hostname(); err == nil {
 		if (string(hostname[0]) == `+`) {
 			ar := strings.Split(myhostname, ".")
 			myhost := ar[0]
 			mydomain := strings.Join(ar[1:], ".")
-			debug("myhost=%s, mydomain=%s\n",myhost,mydomain)
+			diag.Debug("myhost=%s, mydomain=%s\n",myhost,mydomain)
 			result = InNetgroup(string(hostname[1:]), myhost,
 					           username, mydomain)
 		} else {
 			result = strings.ToLower(hostname) == strings.ToLower(myhostname)
 		}
 	}
-	debug("checking %s %s - %s\n", hostname, username, matchStr(result))
+	diag.Debug("checking %s %s - %s\n", hostname, username, matchStr(result))
 	return 
 }
 
-func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) SargonACL {
-	acl := NewSargonACL(len(entries))
+func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) access.ACL {
+	acl := access.NewSargonACL(len(entries))
 	i := 0
 	for _, ent := range entries {
 		t := LdapEntryToACE(ent)
@@ -217,11 +218,10 @@ func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 			defer file.Close()
 			tlsconf.Rand = file
 		} else {
-			log.Println("can't open tls_randfile " +
-				    randfile +
-				    ": " +
+			diag.Error("can't open tls_randfile %s: %s\n",
+				    randfile,
 				    err.Error())
-			log.Println("using default instead")
+			diag.Error("using default instead\n")
 		}
 	}
 
@@ -233,7 +233,7 @@ func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 		if err == nil {
 			tlsconf.Certificates = []tls.Certificate{crt}
 		} else {
-			log.Println("can't set client certificate: " +
+			diag.Error("can't set client certificate: %s\n",
 				    err.Error())
 		}
 	}
@@ -247,12 +247,12 @@ func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 		file, err := ioutil.ReadFile(cacert)
 		if err == nil {
 			if !tlsconf.RootCAs.AppendCertsFromPEM(file) {
-				log.Println("failed to load any certificates from " + cacert)
+				diag.Error("failed to load any certificates from %s\n",
+					cacert)
 			}
 		} else {
-			log.Println("can't read tls_cacert " +
-				    cacert +
-				    ": " +
+			diag.Error("can't read tls_cacert %s: %s",
+				    cacert,
 				    err.Error())
 			ok = false
 		}
@@ -261,9 +261,8 @@ func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 	if cacertdirprs {
 		files, err := ioutil.ReadDir(cacertdir)
 		if err != nil {
-			log.Println("failed to read directory " +
-				    cacertdir +
-				    ": " +
+			diag.Error("failed to read directory %s: %s",
+				    cacertdir,
 				    err.Error())
 			ok = false
 		}
@@ -273,12 +272,12 @@ func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 				file, err := ioutil.ReadFile(filename)
 				if err == nil {
 					if !tlsconf.RootCAs.AppendCertsFromPEM(file) {
-						log.Println("failed to load any certificates from " + filename)
+						diag.Error("failed to load any certificates from %s\n",
+							filename)
 					}
 				} else {
-					log.Println("can't read certificate file " +
-						    filename +
-						    ": " +
+					diag.Error("can't read certificate file %s: %s",
+						    filename,
 						    err.Error())
 				}
 			}
@@ -294,8 +293,8 @@ func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 	return
 }
 
-func (srg *Sargon) FindUser (username string) (SargonACL, error) {
-	debug("Looking up user %s\n", username)
+func (srg *Sargon) FindUser (username string) (access.ACL, error) {
+	diag.Debug("Looking up user %s\n", username)
 	cf := LdapConfig{}
 	err := cf.ReadPath(srg.LdapConf)
 	if err != nil {
@@ -304,13 +303,13 @@ func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 
 	net, addr, ssl := uriToNetAddr(cf[`uri`])
 	if net == "" {
-		log.Println("can't parse URI")
+		diag.Error("can't parse URI\n")
 		return nil, errors.New("invalid LDAP URI")
 	}
 
 	var l *ldap.Conn
 
-	debug("Connecting to LDAP at %s://%s", net, addr)
+	diag.Debug("Connecting to LDAP at %s://%s", net, addr)
 	if ssl {
 		tlsconf, _ := NewTlsConfig(cf)
 		l, err = ldap.DialTLS(net, addr, tlsconf)
@@ -319,7 +318,7 @@ func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 	}
 
 	if err != nil {
-		log.Println("can't connect to LDAP: " + err.Error())
+		diag.Error("can't connect to LDAP: %s\n", err.Error())
 		return nil, err
 	}
 	defer l.Close()
@@ -329,7 +328,7 @@ func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 
 		err := l.StartTLS(tlsconf)
 		if err != nil {
-			log.Println("can't start TLS session: " + err.Error())
+			diag.Error("can't start TLS session: %s\n", err.Error())
 			return nil, err
 		}
 	}
@@ -345,7 +344,9 @@ func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 			if err == nil {
 				passwd = string(pw)
 			} else {
-				log.Fatal("can't read password file " + pwfile + ": " + err.Error())
+				diag.Error("can't read password file %s: %s\n",
+					pwfile,
+					err.Error())
 				return nil, err
 			}
 		}
@@ -353,8 +354,7 @@ func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 
 	err = l.Bind(user, passwd)
 	if err != nil {
-		log.Println("can't bind as " + srg.LdapUser +
-			    ": " + err.Error())
+		diag.Error("can't bind as %s: %s\n", srg.LdapUser, err.Error())
 		return nil, err
 	}
 
@@ -362,7 +362,7 @@ func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 	filter := fmt.Sprintf("(&(objectClass=sargonACL)(|(sargonUser=%s)(sargonUser=ALL)%s))",
 			      username,
 			      group_cond)
-	debug("using filter %s\n", filter)
+	diag.Debug("using filter %s\n", filter)
 	req := ldap.NewSearchRequest(
 		cf[`base`],
 		ldap.ScopeWholeSubtree,
@@ -387,7 +387,7 @@ func (srg *Sargon) FindUser (username string) (SargonACL, error) {
 		nil)
 	sr, err := l.Search(req)
 	if err != nil {
-		log.Println("search request failed: " + err.Error())
+		diag.Error("search request failed: %s\n", err.Error())
 		return nil, err
 	}
 

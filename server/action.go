@@ -1,13 +1,19 @@
-package main
+package server
 
 import (
         "regexp"
+	"github.com/docker/go-plugins-helpers/authorization"
+	"sargon/access"
+	"sargon/auth"
 )
+
+type ActionAuth func (acl access.ACL, req authorization.Request) authorization.Response
 
 type endpoint struct {
 	path *regexp.Regexp
 	method string
 	action string
+	auth ActionAuth
 }
 
 // Table of endpoints, generated from
@@ -45,7 +51,8 @@ var endpoints = []endpoint{
           action: "ConfigUpdate" },
         { path: regexp.MustCompile(`^/v\d+\.\d+/containers/create`),
           method: "POST",
-          action: "ContainerCreate" },
+	  action: "ContainerCreate",
+	  auth: auth.ContainerCreateAuth },
         { path: regexp.MustCompile(`^/v\d+\.\d+/containers/json`),
           method: "GET",
           action: "ContainerList" },
@@ -318,7 +325,8 @@ var endpoints = []endpoint{
           action: "VolumeList" },
         { path: regexp.MustCompile(`^/v\d+\.\d+/volumes/create`),
           method: "POST",
-          action: "VolumeCreate" },
+  	  action: "VolumeCreate",
+	  auth: auth.VolumeCreateAuth },
         { path: regexp.MustCompile(`^/v\d+\.\d+/volumes/prune`),
           method: "POST",
           action: "VolumePrune" },
@@ -330,13 +338,13 @@ var endpoints = []endpoint{
           action: "VolumeInspect" },
 }
 
-func GetAction(method, path string) string {
+func GetAction(method, path string) (string, ActionAuth)  {
 	for _, ep := range endpoints {
 		if ep.method == method &&
 			ep.path.FindStringSubmatch(path) != nil {
-			return ep.action
+			return ep.action, ep.auth
 		}
 	}
-	return "NONE"
+	return "NONE", nil
 }
 
