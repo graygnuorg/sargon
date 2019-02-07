@@ -224,9 +224,11 @@ algorithm:
 2. Execute LDAP query, get the response.
 
 3. Iterate over the returned `sargonACL` objects, selecting only those
-   whose `sargonHost` value matches the server hostname, or (if it starts
-   with `+`) the netgroup it refers to matches the `(host,user,domain)`
-   triplet.
+   with the value of `sargonHost` matching the server hostname, or (if
+   the value starts with `+`) with the netgroup it refers to matching
+   the `(host,user,domain)` triplet.
+
+   To match the netgroup, the libc function [innetgr(3)](http://man7.org/linux/man-pages/man3/setnetgrent.3.html) is used.
 
 4. Sort the remaining entries by the value of their `sargonOrder` attribute
    in ascending order.
