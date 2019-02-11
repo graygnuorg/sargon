@@ -1,7 +1,7 @@
 # Sargon
 
 Sargon is a docker authorization plugin that controls container creation.
-It enables the administrator to excercise control over the containers that
+It enables the administrator to exercise control over the containers that
 users are allowed to create and decide whether to permit creation of
 privileged containers, what parts of the host file system can be visible
 to containers via bind or volume mechanism, what memory limits to apply,
@@ -21,7 +21,7 @@ After cloning, change to the source directory and run
 
 ## Usage
 
-When started, the program reads its configuration file, disconnects iself
+When started, the program reads its configuration file, disconnects itself
 from the controlling terminal and continues running in the background. Error
 reporting goes to the syslog facility `daemon`. The following options are
 recognized:
@@ -174,7 +174,7 @@ with _(single)_, multiple attribute instances are allowed.
 
 * `sargonOrder` (single)
 
-  An integer to order `sargonACL` entries.
+  An integer to order `sargonACL` entries. If not present, 0 is assumed.
 
 * `sargonMount`
 
@@ -203,7 +203,19 @@ with _(single)_, multiple attribute instances are allowed.
   Names listed in this attribute are case-insensitive. The `CAP_` prefix is
   optional.
 
-To determin privileges of the requesting user, *sargon* uses the following
+* `sargonNotBefore`
+
+  A timestamp in the form `yyyymmddHHMMSSZ` that provides a start date/time
+  for when this entry will be valid. Notice, that the timestamp must be in
+  UTC.
+
+* `sargonNotAfter`
+
+  A timestamp in the form `yyyymmddHHMMSSZ` that provides an expiration
+  date/time after which this entry ceases to be valid. Notice, that the
+  timestamp must be in UTC.
+
+To determine privileges of the requesting user, *sargon* uses the following
 algorithm:
 
 1. Create LDAP filter with the user name and the names of the groups the
@@ -219,7 +231,10 @@ algorithm:
           (sargonUser=%docker)
           (sargonUser=%wheel)))`
 
-   (Notice, that it is split in multiple indented lines for readability).
+   Notice, that (1) the filter string is split in multiple indented lines
+   for readability, and (2) the part of filter that controls the validity
+   of the entry using the `sargonNotBefore` and `sargonNotAfter` attributes
+   is omitted for clarity.
 
 2. Execute LDAP query, get the response.
 
@@ -235,12 +250,12 @@ algorithm:
 
 5. Start with the first returned object.
 
-6. If the requested docker action is explicitely listed in one of its
-   `sargonAllow` atribute, go to step 9.
+6. If the requested docker action is explicitly listed in one of its
+   `sargonAllow` attribute, go to step 9.
 
-7. Otherwise, if either the requested action or the meta-action `ALL`
-   is listed in one of the objects's `sargonDeny` attribute, go to step
-   16.
+7. Otherwise, if the object has one or more `sargonDeny` attributes and
+   if one of these contains the requested action or the meta-action `ALL`,
+   then go to step 16.
 
 8. Advance to the next object, and restart from step 6.
 
@@ -256,7 +271,7 @@ algorithm:
 
 12. Check requested binds and mounts. For each source directory, check
     it against each `sargonMount` attribute.  If it matches the attribute
-    exactly, or if the attribute's value ends with a `/*` and the source
+    exactly, or if the attribute value ends with a `/*` and the source
     directory prefix matches the value, then the mount is allowed.
     Otherwise, go to 16.
 

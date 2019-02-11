@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 	"io/ioutil"
 	"path/filepath"
 	"errors"
@@ -359,9 +360,17 @@ func (srg *Sargon) FindUser (username string) (access.ACL, error) {
 	}
 
 	group_cond := FilterGroupCond(username)
-	filter := fmt.Sprintf("(&(objectClass=sargonACL)(|(sargonUser=%s)(sargonUser=ALL)%s))",
-			      username,
-			      group_cond)
+	// The following schizophrenic notation means just "%Y%m%d%H%M%S.0Z".
+	t := time.Now().UTC().Format("20060102150405") + ".0Z"
+	filter := fmt.Sprintf(
+		"(&(objectClass=sargonACL)" +
+		"(|(sargonUser=%s)(sargonUser=ALL)%s)" +
+		"(|(!(sargonNotAfter=*))(sargonNotAfter>=%s))" +
+		"(|(!(sargonNotBefore=*))(sargonNotBefore<=%s)))",
+		username,
+		group_cond,
+		t,
+		t)
 	diag.Debug("using filter %s\n", filter)
 	req := ldap.NewSearchRequest(
 		cf[`base`],
