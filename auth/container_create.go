@@ -55,7 +55,8 @@ func AllowCreate(acl access.ACL, body *createRequest, username string) (bool, st
 	// Check binds (old API)
 	for _, b := range body.HostConfig.Binds {
 		a := strings.SplitN(b, ":", 2)
-		res, id := acl.MountIsAllowed(a[0])
+		res, id := acl.MountIsAllowed(a[0],
+			                      strings.HasSuffix(a[1], ":ro"))
 		diag.Trace("%s: binding to %s is %s by %s\n",
 		      username, a[0], access.Resolution(res), id)
 		if ! res {
@@ -66,7 +67,7 @@ func AllowCreate(acl access.ACL, body *createRequest, username string) (bool, st
 	// Check mounts (new API)
 	for _, m := range body.HostConfig.Mounts {
 		if m.Type == mount.TypeBind {
-			res, id := acl.MountIsAllowed(m.Source)
+			res, id := acl.MountIsAllowed(m.Source, m.ReadOnly)
 			diag.Trace("%s: mounting %s is %s by %s\n",
 			      username, m.Source, access.Resolution(res), id)
 			if ! res {

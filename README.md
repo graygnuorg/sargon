@@ -179,6 +179,12 @@ with _(single)_, multiple attribute instances are allowed.
 
   Name of the directory on the host filesystem, which is allowed for bind
   and mount operations.
+
+  If the name ends with `/*` only subdirectories of this directory can be
+  mounted.
+
+  If the directory name (with optional `/*` suffix) is followed by the
+  string `(ro)`, only read-only mounting will be allowed.
   
 * `sargonAllowPrivileged` (single)
 

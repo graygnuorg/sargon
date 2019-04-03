@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"errors"
+	"regexp"
 	"sargon/diag"
 )
 
@@ -146,8 +147,16 @@ func realpath(s string) (string, error) {
         return filepath.Abs(path);
 }
 
-func (ace ACE) MountIsAllowed(dir string) EvalResult {
+var mpointRe = regexp.MustCompile(`^(.+)\s*\(ro\)$`)
+
+func (ace ACE) MountIsAllowed(dir string, ro bool) EvalResult {
 	for _, mp := range ace.Mount {
+		if res := mpointRe.FindStringSubmatch(mp); res != nil {
+			if !ro {
+				continue
+			}
+			mp = res[1]
+		}
 		if strings.HasSuffix(mp, "/*") {
 			if strings.HasPrefix(dir, mp[0:len(mp)-1]) {
 				return accept
@@ -159,14 +168,14 @@ func (ace ACE) MountIsAllowed(dir string) EvalResult {
 	return undef
 }
 
-func (acl ACL) MountIsAllowed(dir string) (bool, string) {
+func (acl ACL) MountIsAllowed(dir string, ro bool) (bool, string) {
 	mpt, err := realpath(dir)
 	if err != nil {
 		diag.Error("can't resolve path %s: %s\n", dir, err.Error())
 		return false, "(bad path)"
 	}
 	for _, ace := range acl {
-		res := ace.MountIsAllowed(mpt)
+		res := ace.MountIsAllowed(mpt, ro)
 		if res.Defined() {
 			return res.Accept(), ace.Id
 		}

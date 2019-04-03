@@ -41,7 +41,7 @@ func VolumeCreateAuth(acl access.ACL, req authorization.Request) authorization.R
 				   body, err.Error())
 			return authorization.Response{Err: err.Error()}
 		}
-		res, id := acl.MountIsAllowed(mpt)
+		res, id := acl.MountIsAllowed(mpt, false)
 		diag.Trace("%s: binding to %s is %s by %s\n",
 		      req.User, mpt, access.Resolution(res), id)
 		if !res {
