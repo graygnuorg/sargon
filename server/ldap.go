@@ -371,11 +371,38 @@ func (srg *Sargon) FindUser (username string) (access.ACL, error) {
 		group_cond,
 		t,
 		t)
+
+	scope := ldap.ScopeWholeSubtree
+	if kw, prs := cf[`scope`]; prs {
+		switch strings.ToLower(kw) {
+		case `sub`:
+			scope = ldap.ScopeWholeSubtree
+		case `one`:
+			scope = ldap.ScopeSingleLevel
+		case `base`:
+			scope = ldap.ScopeBaseObject
+		}
+	}
+
+	deref := ldap.NeverDerefAliases
+	if kw, prs := cf[`deref`]; prs {
+		switch strings.ToLower(kw) {
+		case `never`:
+			deref = ldap.NeverDerefAliases
+		case `searching`:
+			deref = ldap.DerefInSearching
+		case `finding`:
+			deref = ldap.DerefFindingBaseObj
+		case `always`:
+			deref = ldap.DerefAlways
+		}
+	}
+
 	diag.Debug("using filter %s\n", filter)
 	req := ldap.NewSearchRequest(
 		cf[`base`],
-		ldap.ScopeWholeSubtree,
-		ldap.NeverDerefAliases,
+		scope,
+		deref,
 		0,
 		0,
 		false,
