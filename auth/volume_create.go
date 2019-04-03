@@ -10,13 +10,13 @@ import (
 	"sargon/diag"
 )	
 
-type DriverMountPoint func (body *volume.VolumesCreateBody) (string, error)
+type DriverMountPoint func (body *volume.VolumeCreateBody) (string, error)
 
 var knownDrivers = map[string]DriverMountPoint{
 	"local-persist": LocalPersistMpt,
 }
 
-func LocalPersistMpt(body *volume.VolumesCreateBody) (mpt string, err error) {
+func LocalPersistMpt(body *volume.VolumeCreateBody) (mpt string, err error) {
 	mpt, prs := body.DriverOpts["mountpoint"]
 	if !prs {
 		err = errors.New("No mountpoint specified?")
@@ -25,7 +25,7 @@ func LocalPersistMpt(body *volume.VolumesCreateBody) (mpt string, err error) {
 }
 
 func VolumeCreateAuth(acl access.ACL, req authorization.Request) authorization.Response {
-	body := &volume.VolumesCreateBody{}
+	body := &volume.VolumeCreateBody{}
 	if err := json.NewDecoder(bytes.NewReader(req.RequestBody)).Decode(body); err != nil {
 		return authorization.Response{Err: err.Error()}
 	}

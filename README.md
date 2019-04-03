@@ -14,7 +14,6 @@ User privileges are kept in LDAP.
 After cloning, change to the source directory and run
 
 ```text
-  dep init
   dep ensure
   go build
 ```
