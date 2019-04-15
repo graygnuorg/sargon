@@ -7,6 +7,7 @@ import (
 	"errors"
 	"regexp"
 	"sargon/diag"
+	"os/user"
 )
 
 type ACE struct {
@@ -173,6 +174,9 @@ func (acl ACL) MountIsAllowed(dir string, ro bool) (bool, string) {
 	if err != nil {
 		diag.Error("can't resolve path %s: %s\n", dir, err.Error())
 		return false, "(bad path)"
+	}
+	if mpt != dir {
+		diag.Trace("%s is a symlink to %s\n", dir, mpt)
 	}
 	for _, ace := range acl {
 		res := ace.MountIsAllowed(mpt, ro)

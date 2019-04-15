@@ -185,7 +185,22 @@ with _(single)_, multiple attribute instances are allowed.
 
   If the directory name (with optional `/*` suffix) is followed by the
   string `(ro)`, only read-only mounting will be allowed.
-  
+
+  Prior to use, values of this attribute undergo variable expansion,
+  if the authenticated user name is found in the system user database.
+  During variable expansion variable references in form `$`_V_ or
+  `${`_V_`}` are replaced with the actual value of variable _V_. The following
+  variables are defined:
+
+  | Variable   | Expands to |
+  | ---------- | ---------- |
+  | `uid`      | User ID    |
+  | `gid`      | Group ID   |
+  | `name`     | User name  |
+  | `home` or `dir` | Home directory |
+
+  Undefined variables are left unexpanded.
+
 * `sargonAllowPrivileged` (single)
 
   The word `TRUE` if the users are allowed to create privileged containers.

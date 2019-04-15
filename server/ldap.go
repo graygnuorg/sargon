@@ -180,9 +180,40 @@ func MatchHost(hostname, username string) (result bool) {
 	return 
 }
 
+func ExpandUser(ace *access.ACE, usr *user.User) {
+	re := regexp.MustCompile(`\$(((\w+)\b)|\{\w+\})`)
+	for i, mp := range ace.Mount {
+		ace.Mount[i] = re.ReplaceAllStringFunc(mp,
+			func (kw string) string {
+				switch kw {
+				case `$uid`,`${uid}`:
+					return usr.Uid
+				case `$gid`,`${gid}`:
+					return usr.Gid
+				case `$name`,`${name}`:
+					return usr.Username
+				case `$home`,`${home}`,`$dir`,`${dir}`:
+					return usr.HomeDir
+				}
+				return `$` + kw
+			})
+		if mp != ace.Mount[i] {
+			diag.Debug("expand %s => %s\n", mp, ace.Mount[i]);
+		}
+	}
+}
+
 func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) access.ACL {
 	acl := access.NewSargonACL(len(entries))
 	i := 0
+	usr, err := user.Lookup(username)
+	if err != nil {
+		if _, ok := err.(user.UnknownUserError); ok {
+			diag.Debug("no such system user: %s\n", username);
+		} else {
+			diag.Error("can't get user record for %s\n", username);
+		}
+	}
 	for _, ent := range entries {
 		t := LdapEntryToACE(ent)
 		m := false
@@ -192,6 +223,9 @@ func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) access.ACL {
 			}
 		}
 		if m {
+			if err == nil {
+				ExpandUser(&t, usr)
+			}
 			acl[i] = t
 			i += 1
 		}
