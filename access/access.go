@@ -7,7 +7,6 @@ import (
 	"errors"
 	"regexp"
 	"sargon/diag"
-	"os/user"
 )
 
 type ACE struct {
@@ -148,7 +147,10 @@ func realpath(s string) (string, error) {
         return filepath.Abs(path);
 }
 
-var mpointRe = regexp.MustCompile(`^(.+)\s*\(ro\)$`)
+var (
+	mpointRe = regexp.MustCompile(`^(.+)\s*\(ro\)$`)
+	volumeRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*`)
+)
 
 func (ace ACE) MountIsAllowed(dir string, ro bool) EvalResult {
 	for _, mp := range ace.Mount {
@@ -170,6 +172,10 @@ func (ace ACE) MountIsAllowed(dir string, ro bool) EvalResult {
 }
 
 func (acl ACL) MountIsAllowed(dir string, ro bool) (bool, string) {
+	if volumeRe.FindStringIndex(dir) != nil {
+		// Volume mounts are allowed
+		return true, "volume mount"
+	}
 	mpt, err := realpath(dir)
 	if err != nil {
 		diag.Error("can't resolve path %s: %s\n", dir, err.Error())
