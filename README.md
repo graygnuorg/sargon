@@ -267,7 +267,7 @@ algorithm:
 
 ```text
       (&(objectClass=sargonACL)
-        (|(sargonUser=%s)
+        (|(sargonUser=smt)
           (sargonUser=ALL)
           (sargonUser=%staff)
           (sargonUser=%docker)
