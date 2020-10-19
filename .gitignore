@@ -1,5 +1,7 @@
 .emacs*
 *~
 sargon
+go.sum
+*.tar.gz
 /tmp/
 /vendor/

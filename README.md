@@ -14,9 +14,30 @@ User privileges are kept in LDAP.
 After cloning, change to the source directory and run
 
 ```text
-  dep ensure
-  go build
+ make
 ```
+
+To install the created binary, run (as root):
+
+```text
+ make install
+```
+
+By default, the *sargon* binary is installed to `/usr/local/bin`.  To
+select another installation directory, use the `BINDIR` or `PREFIX`
+variable.  The `BINDIR` variable specifies the directory to install
+*sargon* to.  E.g. to istall it to `/usr/bin`, do
+
+```text
+ make install BINDIR=/usr/bin
+```
+
+Alternatively, you may use the `PREFIX` variable, which specifies the
+directory where `bin` is located, e.g.:
+
+```text
+ make install PREFIX=/usr
+``` 
 
 ## Usage
 
@@ -235,7 +256,7 @@ with _(single)_, multiple attribute instances are allowed.
   date/time after which this entry ceases to be valid. Notice, that the
   timestamp must be in UTC.
 
-To determine privileges of the requesting user, *sargon* uses the following
+When verifying each incoming request, *sargon* uses the following
 algorithm:
 
 1. Create LDAP filter with the user name and the names of the groups the
@@ -274,36 +295,34 @@ algorithm:
    `sargonAllow` attribute, go to step 9.
 
 7. Otherwise, if the object has one or more `sargonDeny` attributes and
-   if one of these contains the requested action or the meta-action `ALL`,
-   then go to step 16.
+   one of these contains the requested action or the meta-action `ALL`,
+   then deny the request.
 
 8. Advance to the next object, and restart from step 6.
 
-9. Unless the requested action is `ContainerCreate`, go to step 15.
+9. Unless the requested action is `ContainerCreate`, authorize the request.
 
-10. If privileges container creation is requested:
-    If `sargonAllowPrivileged` is `FALSE`, then go to 16.
+10. If privileges container creation is requestedm and
+    `sargonAllowPrivileged` is `FALSE`, then deny the request.
     Otherwise, advance to the next step.
 
 11. If any additional linux capabilities are requested, check if they
     are listed in `sargonAllowCapability` attributes. If any of them is
-    not, go to step 16.
+    not, deny the request.
 
-12. Check requested binds and mounts. For each source directory, check
-    it against each `sargonMount` attribute.  If it matches the attribute
+12. Check requested binds and mounts. Check each source directory against
+    each `sargonMount` attribute.  If the directory matches the attribute
     exactly, or if the attribute value ends with a `/*` and the source
     directory prefix matches the value, then the mount is allowed.
-    Otherwise, go to 16.
+    Otherwise, request is denied,
 
 13. If the requested maximum memory is greater than the value of the
-    `sargonMaxMemory` attribute, go to 16.
+    `sargonMaxMemory` attribute, request is denied.
 
 14. If the requested maximum kernel memory is greater than the value of the
-    `sargonMaxKernelMemory` attribute, go to 16.
+    `sargonMaxKernelMemory` attribute, request is denied.
 
-15. Success. Authorize the request.
-
-16. Failure. Deny the request.
+15. Otherwise, request is authorized.
 
 ## Actions
 
