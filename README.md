@@ -265,12 +265,14 @@ algorithm:
    supplementary groups are `staff`, `docker`, `wheel`, then the LDAP
    filter will be:
 
-     `(&(objectClass=sargonACL)
+```text
+      (&(objectClass=sargonACL)
         (|(sargonUser=%s)
           (sargonUser=ALL)
           (sargonUser=%staff)
           (sargonUser=%docker)
-          (sargonUser=%wheel)))`
+          (sargonUser=%wheel)))
+```	  
 
    Notice, that (1) the filter string is split in multiple indented lines
    for readability, and (2) the part of filter that controls the validity
