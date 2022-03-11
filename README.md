@@ -108,7 +108,7 @@ The following keywords are recognized:
 
 After reading its main configuration file, *sargon* scans the LDAP
 configuration path (see the `LdapConf` variable above). The first file that
-exists and is readable is then read. The format of the file is described in
+exists and is readable is read. The format of the file is described in
 detail in [ldap.conf(5)](https://www.openldap.org/software/man.cgi?query=ldap.conf).
 The following keywords are recognized:
 
@@ -126,8 +126,9 @@ The following keywords are recognized:
 
 * `BINDPWFILE` _filename_
 
-  Use complete contents of _filename_ as the password for simple
-  authentication.
+  Use the content of _filename_ as the password for simple
+  authentication.  Note, that the file is read verbatim and is not parsed
+  in any way.  In particular, beware of trailing newlines.
 
 * `TLS_CACERT` _filename_
 
@@ -146,7 +147,7 @@ The following keywords are recognized:
 
 * `TLS_KEY` _filename_
 
-  Specifies the file that contains the private key that matches the
+  Specifies the file that contains the private key for the
   certificate stored in the TLS_CERT file.
   
 * `TLS_RANDFILE` _filename_
@@ -162,9 +163,9 @@ The following keywords are recognized:
   
 ## ACLs
 
-Docker user privileges are defined in in the LDAP database in form of
+Privileges for docker users are defined in the LDAP database in form of
 `sargonACL` objects. Each such object defines privileges for a set of
-users who performing a docker action on a set of servers. Each `sargonACL`
+users performing certain docker action on a set of servers. Each `sargonACL`
 object must have the `cn` attribute, uniquely identifying the object.
 It may also have one or more of the following attributes. Except as marked
 with _(single)_, multiple attribute instances are allowed.
@@ -172,7 +173,7 @@ with _(single)_, multiple attribute instances are allowed.
 * `sargonUser`
 
   User to whom this entry applies. If the value begins with a percent
-  sign, the rest of characters after it are treated as the name of a
+  sign, the rest of characters is treated as the name of a
   user group and the entry applies to all users in this group.
 
 * `sargonHost`
@@ -182,24 +183,25 @@ with _(single)_, multiple attribute instances are allowed.
   
 * `sargonAllow`
 
-  Allowed action. Argument is either one of the docker action keywords listed
+  Allowed action. The value must be one of the docker action keywords listed
   below, or the word `ALL` (uppercase) matching all actions.
   
 * `sargonDeny`
 
-  Denied action. Argument is either one of the docker action keywords listed
+  Denied action. The value must be one of the docker action keywords listed
   below, or the word `ALL` (uppercase) matching all actions. See below for
   a detailed discussion of how `sargonAllow` and `sargonDeny` policies
   operate.
 
 * `sargonOrder` (single)
 
-  An integer to order `sargonACL` entries. If not present, 0 is assumed.
+  An integer used to order multiple `sargonACL` entries. If not present, 0
+  is assumed.
 
 * `sargonMount`
 
-  Name of the directory on the host filesystem, which is allowed for bind
-  and mount operations.
+  Name of the directory on the host filesystem that can be mounted inside
+  a contained.
 
   If the name ends with `/*` only subdirectories of this directory can be
   mounted.
@@ -207,11 +209,9 @@ with _(single)_, multiple attribute instances are allowed.
   If the directory name (with optional `/*` suffix) is followed by the
   string `(ro)`, only read-only mounting will be allowed.
 
-  Prior to use, values of this attribute undergo variable expansion,
-  if the authenticated user name is found in the system user database.
-  During variable expansion variable references in form `$`_V_ or
-  `${`_V_`}` are replaced with the actual value of variable _V_. The following
-  variables are defined:
+  Prior to use, values of this attribute undergo variable expansion: any
+  variable references in form `$`_V_ or `${`_V_`}` are replaced with the
+  actual value of variable _V_. The following variables are defined:
 
   | Variable   | Expands to |
   | ---------- | ---------- |
@@ -224,13 +224,13 @@ with _(single)_, multiple attribute instances are allowed.
 
 * `sargonAllowPrivileged` (single)
 
-  The word `TRUE` if the users are allowed to create privileged containers.
+  The word `TRUE` if the object allows creation of privileged containers.
   `FALSE` otherwise.
   
 * `sargonMaxMemory` (single)
 
-  Limit on memory usage. The value is an integer optionally suffixed with
-  `K`, `M`, or `G` (case-insensitive).
+  Maximum size of the memory the container is allowed to use. The value is
+  an integer optionally suffixed with `K`, `M`, or `G` (case-insensitive).
   
 * `sargonMaxKernelMemory` (single)
 
@@ -261,8 +261,8 @@ algorithm:
 
 1. Create LDAP filter with the user name and the names of the groups the
    user belongs to.
-   For example, if the requesting user name is `smt`, and his main and
-   supplementary groups are `staff`, `docker`, `wheel`, then the LDAP
+   For example, if the requesting user name is `smt`, and this user is
+   member of the groups `staff`, `docker`, and `wheel`, then the LDAP
    filter will be:
 
 ```text
@@ -275,15 +275,15 @@ algorithm:
 ```	  
 
    Notice, that (1) the filter string is split in multiple indented lines
-   for readability, and (2) the part of filter that controls the validity
-   of the entry using the `sargonNotBefore` and `sargonNotAfter` attributes
-   is omitted for clarity.
+   for readability, and (2) the filter normally contains conditions that
+   control validity of the entry using the `sargonNotBefore` and
+   `sargonNotAfter` attributes. These conditions are omitted for clarity.
 
 2. Execute LDAP query, get the response.
 
 3. Iterate over the returned `sargonACL` objects, selecting only those
    with the value of `sargonHost` matching the server hostname, or (if
-   the value starts with `+`) with the netgroup it refers to matching
+   the value starts with `+`) with the netgroup that matches
    the `(host,user,domain)` triplet.
 
    To match the netgroup, the libc function [innetgr(3)](http://man7.org/linux/man-pages/man3/setnetgrent.3.html) is used.
@@ -294,7 +294,7 @@ algorithm:
 5. Start with the first returned object.
 
 6. If the requested docker action is explicitly listed in one of its
-   `sargonAllow` attribute, go to step 9.
+   `sargonAllow` attributes, go to step 9.
 
 7. Otherwise, if the object has one or more `sargonDeny` attributes and
    one of these contains the requested action or the meta-action `ALL`,
@@ -304,27 +304,27 @@ algorithm:
 
 9. Unless the requested action is `ContainerCreate`, authorize the request.
 
-10. If privileges container creation is requestedm and
-    `sargonAllowPrivileged` is `FALSE`, then deny the request.
+10. If creation of a privileged container is requested, consult the 
+    `sargonAllowPrivileged` attribute. If it is `FALSE`, deny the request.
     Otherwise, advance to the next step.
 
-11. If any additional linux capabilities are requested, check if they
-    are listed in `sargonAllowCapability` attributes. If any of them is
-    not, deny the request.
+11. If any additional linux capabilities are requested, check if all of
+    them are listed in `sargonAllowCapability` attributes. If not, deny
+    the request.
 
-12. Check requested binds and mounts. Check each source directory against
+12. Check the requested binds and mounts. Check each source directory against
     each `sargonMount` attribute.  If the directory matches the attribute
     exactly, or if the attribute value ends with a `/*` and the source
     directory prefix matches the value, then the mount is allowed.
-    Otherwise, request is denied,
+    Otherwise, the request is denied,
 
 13. If the requested maximum memory is greater than the value of the
-    `sargonMaxMemory` attribute, request is denied.
+    `sargonMaxMemory` attribute, the request is denied.
 
 14. If the requested maximum kernel memory is greater than the value of the
-    `sargonMaxKernelMemory` attribute, request is denied.
+    `sargonMaxKernelMemory` attribute, the request is denied.
 
-15. Otherwise, request is authorized.
+15. Otherwise, the request is authorized.
 
 ## Actions
 
