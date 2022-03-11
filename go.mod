@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/Microsoft/go-winio v0.4.12 // indirect
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e // indirect
-	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/docker/distribution v2.8.0+incompatible // indirect
 	github.com/docker/docker v17.12.0-ce-rc1.0.20190403111212-cf508036aacf+incompatible
 	github.com/docker/engine-api v0.4.1-0.20160908232104-4290f40c0566
 	github.com/docker/go-connections v0.4.0 // indirect
@@ -17,7 +17,7 @@ require (
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
-	github.com/opencontainers/image-spec v1.0.1 // indirect
+	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sevlyar/go-daemon v0.1.4
 	github.com/sirupsen/logrus v1.4.1 // indirect
