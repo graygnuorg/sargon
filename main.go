@@ -1,36 +1,45 @@
 package main
 
 import (
-	"flag"
 	"os"
 	"github.com/docker/go-plugins-helpers/authorization"
 	"github.com/sevlyar/go-daemon"
-	"log"
+	"github.com/pborman/getopt/v2"
+	"fmt"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"sargon/diag"
 	"sargon/server"
 )
 
 func main() {
-	var (
-		config_file string
-	        foreground bool
-		debug_mode bool
-		trace_mode bool
-		diag_flags int
-	)
-	
-	flag.BoolVar(&foreground, "foreground", false,
-		"remain in foreground")
-	flag.BoolVar(&debug_mode, "debug", false,
-		"verbose debugging")
-	flag.BoolVar(&trace_mode, "trace", false,
-		"verbose debugging")
+	config_file := "/etc/docker/sargon.json"
+        foreground := false
+	debug_mode := false
+	trace_mode := false
+	help_mode := false
+	diag_flags := 0
 
-	flag.StringVar(&config_file, "config", "/etc/docker/sargon.json",
-	                "Sargon configuration file")
-	flag.Parse()
+	optset := getopt.New()
+	optset.SetProgram(filepath.Base(os.Args[0]))
+	optset.SetParameters("")
+	optset.FlagLong(&foreground, "foreground", 'f', "remain in foreground")
+	optset.FlagLong(&debug_mode, "debug", 'd', "verbose debugging")
+	optset.FlagLong(&trace_mode, "trace", 't', "enable trace output")
+	optset.FlagLong(&config_file, "config", 'c', "read this configuration file")
+	optset.FlagLong(&help_mode, "help", 'h', "display this help summary")
+
+	if err := optset.Getopt(os.Args, nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		optset.PrintUsage(os.Stderr)
+		os.Exit(1)
+	}
+
+	if help_mode {
+		optset.PrintUsage(os.Stdout)
+		os.Exit(0)
+	}
 
 	if debug_mode {
 		diag_flags |= diag.LogFlagDebug
@@ -61,7 +70,7 @@ func main() {
 
 		d, err := ctx.Reborn()
 		if err != nil {
-			log.Fatal("can't go daemon: ", err)
+			diag.Error("can't go daemon: ", err)
 		}
 		if d != nil {
 			return
