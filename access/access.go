@@ -1,6 +1,7 @@
 package access
 
 import (
+	"os"
 	"strings"
 	"path/filepath"
 	"strconv"
@@ -139,12 +140,33 @@ func (acl ACL) CapIsAllowed(cap string) (bool, string) {
 	return false, "default policy"
 }
 
-func realpath(s string) (string, error) {
-        path, err := filepath.EvalSymlinks(s)
-        if err != nil {
-	        return s, err;
+// Resolve symbolic links in name and convert it to absolute path.
+// Tolerate non-existing file names or trailing name components: if
+// name doesn't exist, strip off its last component and retry with
+// the obtained directory name.  Continue until an existing prefix
+// is found or all directory components have been tried.
+func RealPath(name string) (path string, err error) {
+	var tail []string
+	path = name
+	for path != "" {
+		var s string
+		s, err = filepath.EvalSymlinks(path)
+		if err == nil {
+			path, err = filepath.Abs(s)
+			if err != nil {
+				return
+			}
+			break
+		} else if errors.Is(err, os.ErrNotExist) {
+			tail = append([]string{filepath.Base(path)}, tail...)
+			path = filepath.Dir(path)
+			err = nil
+	        } else {
+			return;
+		}
 	}
-        return filepath.Abs(path);
+	path = filepath.Join(append([]string{path}, tail...)...)
+	return
 }
 
 var (
@@ -176,7 +198,7 @@ func (acl ACL) MountIsAllowed(dir string, ro bool) (bool, string) {
 		// Volume mounts are allowed
 		return true, "volume mount"
 	}
-	mpt, err := realpath(dir)
+	mpt, err := RealPath(dir)
 	if err != nil {
 		diag.Error("can't resolve path %s: %s\n", dir, err.Error())
 		return false, "(bad path)"
