@@ -27,7 +27,7 @@ install: sargon
 	@GOBIN=$(DESTDIR)$(BINDIR) go install .
 
 DISTDIR   = $(PACKAGE)-$(VERSION)
-DISTFILES = go.mod $(SOURCES) $(MANPAGE) README.md LICENSE Makefile 
+DISTFILES = go.mod $(SOURCES) $(MANPAGE) README.md LICENSE Makefile sargon.schema sargon.ldif
 
 distdir:
 	@test -d $(DISTDIR) || mkdir $(DISTDIR)

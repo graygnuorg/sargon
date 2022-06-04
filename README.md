@@ -1,80 +1,229 @@
 # Sargon
 
-Sargon is a docker authorization plugin that controls container creation.
-It enables the administrator to exercise control over the containers that
-users are allowed to create and decide whether to permit creation of
-privileged containers, what parts of the host file system can be visible
-to containers via bind or volume mechanism, what memory limits to apply,
-etc.
+Docker authorization plugin that controls access to various operations
+on containers, volumes, etc.  Access control lists are stored as objects
+in LDAP database.
 
-User privileges are kept in LDAP.
+Used with due proficiency, Sargon mitigates security risks that appear when
+running `dockerd` in a multi-user environment.
 
-## Building
+## Installation
 
-After cloning, change to the source directory and run
+### Building
 
-```text
+After cloning the repository, change to the source directory and run
+
+```sh
  make
 ```
 
 To install the created binary, run (as root):
 
-```text
+```sh
  make install
 ```
 
 By default, the *sargon* binary is installed to `/usr/local/bin`.  To
 select another installation directory, use the `BINDIR` or `PREFIX`
 variable.  The `BINDIR` variable specifies the directory to install
-*sargon* to.  E.g. to istall it to `/usr/bin`, do
+*sargon* to.  E.g. to install it to `/usr/bin`, do
 
-```text
+```sh
  make install BINDIR=/usr/bin
 ```
 
 Alternatively, you may use the `PREFIX` variable, which specifies the
 directory where `bin` is located, e.g.:
 
-```text
+```sh
  make install PREFIX=/usr
 ``` 
+
+### Configure the LDAP database
+
+Include the Sargon schema into your `slapd` configuration.  
+
+Most `slapd` installations nowadays use [dynamic configuration
+system](https://www.openldap.org/doc/admin24/slapdconf2.html).  In
+that case, import the `sargon.ldif` file into your configuration:
+
+```sh
+ ldapadd -f sargon.ldif
+```
+
+Depending on your setup, you may need additional options to `ldapadd`
+
+If using the [legacy configuration](https://www.openldap.org/doc/admin24/slapdconfig.html), 
+copy the file `sargon.schema` to the schema subdirectory of your `slapd`
+configuration directory.  Depending on the installation, it is
+`/etc/openldap/schema` or `/etc/ldap/schema`.  Include it in your
+`slapd` configuration, by adding the following statement to your
+`slapd.conf`:
+
+```conf
+ include         /etc/openldap/schema/sargon.schema
+```
+
+Restart `slapd`.
+
+Create the root object for Sargon ACL hierarchy:
+
+```sh
+ldapadd <<EOF
+dn: ou=sargon,dc=example,dc=com
+objectClass: organizationalUnit
+ou: sargon
+description: root for Sargon (Docker ACL) objects.
+EOF
+```
+
+Create the default policy entry:
+
+```sh
+ldapadd <<EOF
+dn: cn=default-policy,ou=sargon,dc=example,dc=com
+cn: default-policy
+objectClass: sargonACL
+sargonUser: ANONYMOUS
+sargonAllow: ALL
+sargonOrder: 100
+EOF
+```
+
+(don't forget to replace `dc=example,dc=org` with your actual base dn.)
+
+The default policy allows anonymous users to issue any docker
+requests.  The `sargonOrder` attribute ensures it will be placed at
+the end of the [constructed access control list](#user-content-request-processing).
+
+### Configure Docker to use Sargon
+
+Add the following option to your `dockerd` command line:
+
+```sh
+  --authorization-plugin=sargon
+```
+
+The exact place for it depends on how `dockerd` is started on your
+system.  If your system uses `systemd` (which is the case for most
+modern GNU/Linux distributions, such as Ubuntu, Debian, etc), first
+extract the actual `dockerd` command line:
+
+```sh
+show --property=ExecStart --value docker | sed -e 's/.*argv\[\]=//' -e 's/;.*//'
+```
+
+Then run
+
+```sh
+systemctl edit docker
+```
+
+In the text editor it starts, type the following:
+
+```text
+[Service]
+ExecStart=
+ExecStart=COMMAND --authorization-plugin=sargon
+```
+
+where _COMMAND_ is the command line you obtained in the previous step.
+Notice the empty `ExecStart=` at the start of the section.  It is
+mandatory.
+
+Save your changes and exit the editor.
+
+### Adding your first ACL entry
+
+To illustrate the effect of Sargon ACLs on docker, let's add to the
+LDAP database an object that will control what directories anonymous
+users are allowed to mount in containers.  Using your editor, create
+the following `ldif` file:
+
+```ldif
+dn: cn=anon,ou=sargon,dc=example,dc=com
+cn: anon
+objectClass: sargonACL
+sargonUser: ANONYMOUS
+sargonMount: /var/lib/mounts/*
+```
+
+The `sargonUser` attribute declares that this entry applies to
+anonymous users only.  The `sargonMount` attribute says that only
+subdirectories of `/var/lib/mounts` on host machine are allowed to be
+mounted in containers.
+
+Add your changes to the database:
+
+```sh
+ ldapadd -f file.ldif
+```
+
+Now, if you try to run
+
+```sh
+ docker run -v /etc:/usr/local/etc debian:10
+```
+
+you will get the following error:
+
+```text
+docker: Error response from daemon: authorization denied by plugin sargon: mounting /etc is not allowed.
+```
+
+If `sargon` is running in trace mode (`--trace` option), you will see
+the following in its logs:
+
+```text
+[TRACE] ANONYMOUS: binding to /etc is rejected by default policy
+```
+
+On the other hand, running
+
+```sh
+ docker run -v /var/lib/mounts/src:/usr/src debian:10
+```
+
+will succeed.  Sargon trace in this case will contain:
+
+```text
+[TRACE] ANONYMOUS: binding to /var/lib/mounts/src is accepted by cn=anon,ou=sargon,dc=example,dc=com
+```
 
 ## Usage
 
 When started, the program reads its configuration file, disconnects itself
 from the controlling terminal and continues running in the background. Error
-reporting goes to the syslog facility `daemon`. The following options are
-recognized:
+reporting goes to the syslog facility `daemon`. Both short
+(single-dash) and GNU-style long (double-dash) options are supported.
+The following options are recognized:
 
-* `-foreground`
+* `-f`, `--foreground`
 
   Run in the foreground. Send diagnostic output to the stderr.
   
-* `-config=`*FILE*
+* `-c`, `-config=`*FILE*
 
   Read configuration from *FILE* instead of the default
   `/etc/docker/sargon.json`
 
-* `-trace`
+* `-t`, `--trace`
   Trace ACL entries and their effect.
 
-* `-debug`
+* `-d`, `--debug`
 
-  Enable verbose debugging output
+  Enable verbose debugging output.
 
-In order to configure docker to consult sargon when creating new containers,
-add the following option to its command line:
+* `-h`, `--help`
 
-```text
-  --authorization-plugin=sargon
-```
+  Produce a short command line usage summary and exit.
 
 ## Configuration  
 
 Sargon configuration is kept in JSON format in file `/etc/docker/sargon.json`.
 The following keywords are recognized:
 
-* `pidfile`
+* `PidFile`
 
   Name of the PID file. Defaults to `/var/run/sargon.pid`.
 
@@ -143,7 +292,7 @@ The following keywords are recognized:
   
 * `TLS_CERT` _filename_
 
-  Specifies the file that contains the client certificate.
+  Specifies the file that contains client certificate.
 
 * `TLS_KEY` _filename_
 
@@ -176,32 +325,37 @@ with _(single)_, multiple attribute instances are allowed.
   sign, the rest of characters is treated as the name of a
   user group and the entry applies to all users in this group.
 
+<a name="sargonHost"></a>
 * `sargonHost`
 
   Host on which this entry takes effect. If the value starts with a plus
   sign, it is treated as the name of the NIS netgroup.
-  
+
+<a name="sargonAllow"></a>
 * `sargonAllow`
 
   Allowed action. The value must be one of the docker action keywords listed
   below, or the word `ALL` (uppercase) matching all actions.
   
+<a name="sargonDeny"></a>
 * `sargonDeny`
 
   Denied action. The value must be one of the docker action keywords listed
   below, or the word `ALL` (uppercase) matching all actions. See below for
-  a detailed discussion of how `sargonAllow` and `sargonDeny` policies
+  a detailed discussion on how `sargonAllow` and `sargonDeny` policies
   operate.
 
-* `sargonOrder` (single)
+<a name="sargonOrder"></a>
+* `sargonOrder` _(single)_
 
   An integer used to order multiple `sargonACL` entries. If not present, 0
   is assumed.
 
+<a name="sargonMount"></a>
 * `sargonMount`
 
-  Name of the directory on the host filesystem that can be mounted inside
-  a contained.
+  Name of the directory on the host filesystem that is allowed for
+  mounting inside a container.
 
   If the name ends with `/*` only subdirectories of this directory can be
   mounted.
@@ -222,21 +376,25 @@ with _(single)_, multiple attribute instances are allowed.
 
   Undefined variables are left unexpanded.
 
-* `sargonAllowPrivileged` (single)
+<a name="sargonAllowPrivileged"></a>
+* `sargonAllowPrivileged` _(single)_
 
   The word `TRUE` if the object allows creation of privileged containers.
   `FALSE` otherwise.
-  
-* `sargonMaxMemory` (single)
+
+<a name="sargonMaxMemory"></a>
+* `sargonMaxMemory` _(single)_
 
   Maximum size of the memory the container is allowed to use. The value is
   an integer optionally suffixed with `K`, `M`, or `G` (case-insensitive).
   
-* `sargonMaxKernelMemory` (single)
+<a name="sargonMaxKernelMemory"></a>
+* `sargonMaxKernelMemory` _(single)_
 
   Limit on kernel memory usage. The value is an integer optionally suffixed
   with `K`, `M`, or `G` (case-insensitive).
-  
+
+<a name="sargonAllowCapability"></a>
 * `sargonAllowCapability`
 
   Name of the linux capability that is allowed to use with the `--cap-add`
@@ -244,6 +402,7 @@ with _(single)_, multiple attribute instances are allowed.
   Names listed in this attribute are case-insensitive. The `CAP_` prefix is
   optional.
 
+<a name="sargonNotBefore"></a>
 * `sargonNotBefore`
 
   A timestamp in the form `yyyymmddHHMMSSZ` that provides a start date/time
@@ -256,6 +415,7 @@ with _(single)_, multiple attribute instances are allowed.
   date/time after which this entry ceases to be valid. Notice, that the
   timestamp must be in UTC.
 
+<a name="request-processing"></a>
 When verifying each incoming request, *sargon* uses the following
 algorithm:
 
@@ -276,55 +436,65 @@ algorithm:
 
    Notice, that (1) the filter string is split in multiple indented lines
    for readability, and (2) the filter normally contains conditions that
-   control validity of the entry using the `sargonNotBefore` and
+   control validity of the entry using the [`sargonNotBefore`](#user-content-sargonNotBefore) and
    `sargonNotAfter` attributes. These conditions are omitted for clarity.
 
 2. Execute LDAP query, get the response.
 
 3. Iterate over the returned `sargonACL` objects, selecting only those
-   with the value of `sargonHost` matching the server hostname, or (if
-   the value starts with `+`) with the netgroup that matches
-   the `(host,user,domain)` triplet.
+   with the value of [`sargonHost`](#user-content-sargonHost)
+   attribute matching the server hostname, or (if the value starts
+   with `+`) with the netgroup that matches the `(host,user,domain)` triplet.
 
    To match the netgroup, the libc function [innetgr(3)](http://man7.org/linux/man-pages/man3/setnetgrent.3.html) is used.
 
-4. Sort the remaining entries by the value of their `sargonOrder` attribute
-   in ascending order.
+4. Sort the remaining entries by the value of their
+   [`sargonOrder`](#user-content-sargonOrder) attribute in ascending order.
 
 5. Start with the first returned object.
 
 6. If the requested docker action is explicitly listed in one of its
-   `sargonAllow` attributes, go to step 9.
+   [`sargonAllow`](#user-content-sargonAllow) attributes, go to step 9.
 
-7. Otherwise, if the object has one or more `sargonDeny` attributes and
-   one of these contains the requested action or the meta-action `ALL`,
+7. Otherwise, if the object has one or more
+   [`sargonDeny`](#user-content-sargonDeny) attributes and one of
+   these contains the requested action or the meta-action `ALL`,
    then deny the request.
 
 8. Advance to the next object, and restart from step 6.
 
-9. Unless the requested action is `ContainerCreate`, authorize the request.
+9. Unless the requested action is `ContainerCreate` or `VolumeCreate`,
+   authorize the request.
 
-10. If creation of a privileged container is requested, consult the 
-    `sargonAllowPrivileged` attribute. If it is `FALSE`, deny the request.
-    Otherwise, advance to the next step.
+10. For `VolumeCreate` requests, check if the requested mountpoint
+    satisfies the [`sargonMount`](#user-content-sargonMount)
+    attribute.  Authorize the request is so and reject it otherwise.
 
-11. If any additional linux capabilities are requested, check if all of
-    them are listed in `sargonAllowCapability` attributes. If not, deny
-    the request.
+The steps below are followed when processing `ContainerCreate` requests
+ 
+11. If creation of a privileged container is requested, consult the 
+    [`sargonAllowPrivileged`](#user-content-sargonAllowPrivileged)
+    attribute. If its value is `FALSE`, deny the request. Otherwise,
+    advance to the next step.
 
-12. Check the requested binds and mounts. Check each source directory against
-    each `sargonMount` attribute.  If the directory matches the attribute
-    exactly, or if the attribute value ends with a `/*` and the source
-    directory prefix matches the value, then the mount is allowed.
-    Otherwise, the request is denied,
+12. If any additional linux capabilities are requested, check if all of
+    them are listed in [`sargonAllowCapability`](#user-content-sargonAllowCapability)
+    attributes. If not, deny the request.
 
-13. If the requested maximum memory is greater than the value of the
-    `sargonMaxMemory` attribute, the request is denied.
+13. Check the requested binds and mounts. Check each source directory against
+    each [`sargonMount`](#user-content-sargonMount) attribute.  If the
+    directory matches the attribute exactly, or if the attribute value
+    ends with a `/*` and the source directory prefix matches the
+    value, then the mount is allowed. Otherwise, the request is denied,
 
-14. If the requested maximum kernel memory is greater than the value of the
-    `sargonMaxKernelMemory` attribute, the request is denied.
+14. If the requested maximum memory is greater than the value of the
+    [`sargonMaxMemory`](#user-content-sargonMaxMemory) attribute, the request is denied.
 
-15. Otherwise, the request is authorized.
+15. If the requested maximum kernel memory is greater than the value of the
+    [`sargonMaxKernelMemory`](#user-content-sargonMaxKernelMemory)
+    attribute, the request is denied.
+
+16. Otherwise, the request is authorized.
 
 ## Actions
 

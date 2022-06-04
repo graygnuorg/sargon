@@ -7,12 +7,12 @@ import (
 )
 
 type Sargon struct {
-	Pidfile   string `json:"pidfile"`
-	LdapConf string `json:"ldapconf"`
-	LdapUser string `json:"ldapuser"`
-	LdapPass string `json:"ldappassword"`
-	LdapTLS bool `json:"ldaptls"`
-	AnonymousUser string `json:anonymoususer"`
+	PidFile   string `json:"PidFile"`
+	LdapConf string `json:"LdapConf"`
+	LdapUser string `json:"LdapUser"`
+	LdapPass string `json:"LdapPassword"`
+	LdapTLS bool `json:"LdapTLS"`
+	AnonymousUser string `json:AnonymousUser"`
 }
 
 func (srg *Sargon) ReadConfig(f string) {

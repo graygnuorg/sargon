@@ -49,7 +49,7 @@ func main() {
 	}
 	
 	sargon := &server.Sargon{
-		Pidfile: "/var/run/sargon.pid",
+		PidFile: "/var/run/sargon.pid",
 		LdapConf: "/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf",
 		AnonymousUser: "ANONYMOUS",
 	}
@@ -62,7 +62,7 @@ func main() {
 
 	if !foreground {
 		ctx := &daemon.Context{
-			PidFileName: sargon.Pidfile,
+			PidFileName: sargon.PidFile,
 			PidFilePerm: 0644,
 			WorkDir: "/",
 			Umask: 027,
@@ -88,7 +88,7 @@ func main() {
 	go worker(sargon)
 	
 	_ = <-signal_chan
-	os.Remove(sargon.Pidfile)
+	os.Remove(sargon.PidFile)
 	diag.Trace("normal shutdown")
 	os.Exit(0)
 } 

@@ -164,7 +164,9 @@ func matchStr(r bool) string {
 
 func MatchHost(hostname, username string) (result bool) {
 	diag.Debug("checking %s %s\n", hostname, username)
-	if myhostname, err := os.Hostname(); err == nil {
+	if hostname == `ALL` {
+		result = true
+	} else if myhostname, err := os.Hostname(); err == nil {
 		if (string(hostname[0]) == `+`) {
 			ar := strings.Split(myhostname, ".")
 			myhost := ar[0]
@@ -216,13 +218,18 @@ func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) access.ACL {
 	}
 	for _, ent := range entries {
 		t := LdapEntryToACE(ent)
-		m := false
-		for _, hostname := range t.Host {
-			if m = MatchHost(hostname, username); m {
-				break
+		var match bool
+		if len(t.Host) == 0 {
+			match = true
+		} else {
+			match = false
+			for _, hostname := range t.Host {
+				if match = MatchHost(hostname, username); match {
+					break
+				}
 			}
 		}
-		if m {
+		if match {
 			if err == nil {
 				ExpandUser(&t, usr)
 			}
