@@ -24,7 +24,7 @@ clean:
 	@go clean
 
 install: sargon
-	@GOBIN=$(BINDIR) go install .
+	@GOBIN=$(DESTDIR)$(BINDIR) go install .
 
 DISTDIR   = $(PACKAGE)-$(VERSION)
 DISTFILES = go.mod $(SOURCES) $(MANPAGE) README.md LICENSE Makefile 

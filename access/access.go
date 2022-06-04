@@ -198,6 +198,7 @@ func (acl ACL) MountIsAllowed(dir string, ro bool) (bool, string) {
 		// Volume mounts are allowed
 		return true, "volume mount"
 	}
+	dir = filepath.Clean(dir)
 	mpt, err := RealPath(dir)
 	if err != nil {
 		diag.Error("can't resolve path %s: %s\n", dir, err.Error())

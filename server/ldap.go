@@ -23,7 +23,7 @@ import (
 var (
 	commentRe = regexp.MustCompile(`^\s*#`)
 	settingRe = regexp.MustCompile(`^\s*(\S+)\s+(.+)$`)
-	ldapURIRe = regexp.MustCompile(`^(ldap[is]?)://((.+)(?::(.+))?)$`)
+	ldapURIRe = regexp.MustCompile(`^(ldap[is]?)://((.+?)(?::(.+))?)$`)
 )
 
 type LdapConfig map[string]string
