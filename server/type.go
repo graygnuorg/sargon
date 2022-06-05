@@ -22,6 +22,9 @@ func (srg *Sargon) ReadConfig(f string) {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	json.Unmarshal(raw, srg)
+	err = json.Unmarshal(raw, srg)
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
 

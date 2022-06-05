@@ -14,7 +14,8 @@ SOURCES = \
  server/authz.go\
  server/ldap.go\
  server/netgroup.go\
- server/type.go
+ server/type.go\
+ wildmat/wildmat.go
 
 all:
 	@go mod download

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"regexp"
 	"sargon/diag"
+	"sargon/wildmat"
 )
 
 type ACE struct {
@@ -179,23 +180,35 @@ func RealPath(name string) (path string, err error) {
 }
 
 var (
-	mpointRe = regexp.MustCompile(`^(.+)\s*\(ro\)$`)
+	mpointRe = regexp.MustCompile(`^(.+)\s*\((.+)\)$`)
 	volumeRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*`)
 )
 
 func (ace ACE) MountIsAllowed(dir string, ro bool) EvalResult {
+	outer:
 	for _, mp := range ace.Mount {
+		glob := wildmat.GlobLex
 		if res := mpointRe.FindStringSubmatch(mp); res != nil {
-			if !ro {
-				continue
+			for _, flg := range strings.Split(res[2], `,`) {
+				switch flg {
+				case `ro`:
+					if !ro {
+						continue outer
+					}
+
+				case `globlex`:
+					glob = wildmat.GlobLex
+
+				case `globpath`:
+					glob = wildmat.GlobPath
+
+				case `globstar`:
+					glob = wildmat.GlobStar
+				}
 			}
 			mp = res[1]
 		}
-		if strings.HasSuffix(mp, "/*") {
-			if strings.HasPrefix(dir, mp[0:len(mp)-1]) {
-				return accept
-			}
-		} else if mp == dir {
+		if wildmat.Match(mp, dir, glob) {
 			return accept
 		}
 	}
