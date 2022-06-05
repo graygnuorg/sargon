@@ -237,9 +237,7 @@ func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) access.ACL {
 			i += 1
 		}
 	}
-	acl = acl[0:i]
-	sort.Stable(acl)
-	return acl
+	return acl[0:i]
 }
 
 func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
@@ -335,8 +333,12 @@ func NewTlsConfig(cf LdapConfig) (tlsconf *tls.Config, ok bool) {
 	return
 }
 
-func (srg *Sargon) FindUser (username string) (access.ACL, error) {
-	diag.Debug("Looking up user %s\n", username)
+func (srg *Sargon) FindUserLdap (username string) (access.ACL, error) {
+	if srg.LdapConf == "" {
+		return nil, nil
+	}
+
+	diag.Debug("Looking up user %s in LDAP\n", username)
 	cf := LdapConfig{}
 	err := cf.ReadPath(srg.LdapConf)
 	if err != nil {
@@ -469,4 +471,22 @@ func (srg *Sargon) FindUser (username string) (access.ACL, error) {
 	}
 
 	return FilterLdapEntriesToACL(sr.Entries, username), nil
+}
+
+func (srg *Sargon) FindUser (username string) (acl access.ACL, err error) {
+	acl, err = srg.FindUserLdap(username)
+	diag.Debug("Reading %d default ACLs", len(srg.ACL))
+	for i, ent := range srg.ACL {
+		if ent.MatchUser(username) {
+			if ent.Id == "" {
+				ent.Id = `#` + strconv.Itoa(i)
+			}
+			acl = append(acl, ent)
+			err = nil
+		} else {
+			diag.Debug("%v doesn't match", ent)
+		}
+	}
+	sort.Stable(acl)
+	return
 }

@@ -60,6 +60,15 @@ func (acl ACL) Len() int { return len(acl) }
 func (acl ACL) Swap(i, j int) { acl[i], acl[j] = acl[j], acl[i] }
 func (acl ACL) Less(i, j int) bool { return acl[i].Order < acl[j].Order }
 
+func (ace ACE) MatchUser(username string) bool {
+	for _, user := range ace.User {
+		if user == "ALL" || user == username {
+			return true
+		}
+	}
+	return false
+}
+
 func (ace ACE) ActionIsAllowed(action string) (result EvalResult) {
 	for _, act := range ace.Allow {
 		if act == action {

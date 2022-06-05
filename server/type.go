@@ -4,15 +4,17 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
+	"sargon/access"
 )
 
 type Sargon struct {
-	PidFile   string `json:"PidFile"`
-	LdapConf string `json:"LdapConf"`
-	LdapUser string `json:"LdapUser"`
-	LdapPass string `json:"LdapPassword"`
-	LdapTLS bool `json:"LdapTLS"`
-	AnonymousUser string `json:AnonymousUser"`
+	PidFile string
+	LdapConf string
+	LdapUser string
+	LdapPass string
+	LdapTLS bool
+	AnonymousUser string
+	ACL access.ACL
 }
 
 func (srg *Sargon) ReadConfig(f string) {
