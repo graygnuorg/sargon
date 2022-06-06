@@ -165,7 +165,7 @@ configuration file as:
     "ACL":[
       {
           "Id":"default policy",
-	  "User":"ANONYMOUS",
+	  "User":["ANONYMOUS"],
 	  "Allow":["ALL"],
 	  "Order":100
       }
@@ -442,16 +442,12 @@ with _(single)_, multiple attribute instances are allowed.
 <a name="sargonAllow"></a>
 * `sargonAllow`
 
-  Allowed action. The value must be one of the docker action keywords listed
-  below, or the word `ALL` (uppercase) matching all actions.
+  Allowed action. The value must be one of the docker [action keywords](#user-content-actions), or the word `ALL` (uppercase) matching all actions.
   
 <a name="sargonDeny"></a>
 * `sargonDeny`
 
-  Denied action. The value must be one of the docker action keywords listed
-  below, or the word `ALL` (uppercase) matching all actions. See below for
-  a detailed discussion on how `sargonAllow` and `sargonDeny` policies
-  operate.
+  Denied action. The value must be one of the docker [action keywords](#user-content-actions), or the word `ALL` (uppercase) matching all actions. See [below](#user-content-request-processing) for a detailed discussion on how `sargonAllow` and `sargonDeny` policies operate.
 
 <a name="sargonOrder"></a>
 * `sargonOrder` _(single)_
