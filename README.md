@@ -1,8 +1,7 @@
 # Sargon
 
-Docker authorization plugin that controls access to various operations
-on containers, volumes, etc.  Access control lists are stored as objects
-in LDAP database.
+Sargon authorizes requests to a `dockerd` daemon using access control
+lists defined in a LDAP database or in its configuration file.
 
 Used with due proficiency, Sargon mitigates security risks that appear when
 running `dockerd` in a multi-user environment.
@@ -38,6 +37,52 @@ directory where `bin` is located, e.g.:
 ```sh
  make install PREFIX=/usr
 ``` 
+
+### Create the configuration file
+
+Sargon provides sufficiently sane defaults that allow it to be run
+without explicit configuration file.  These defaults are:
+
+1. Upon startup, the PID of the running process is stored in file `/var/run/sargon.pid`.
+
+2. ACLs are stored in an LDAP database.
+
+3. The LDAP configuration file is looked up in the following locations:
+
+  * `/etc/ldap.conf`
+  * `/etc/ldap/ldap.conf`
+  * `/etc/openldap/ldap.conf`
+
+4. Anonymous user name is `ANONYMOUS`.
+
+If these don't suit your needs, create the file `/etc/docker/sargon.json`.
+Using the [configuration file description](#user-content-configuration),
+edit the Sargon settings to your liking.
+
+The above defaults correspond to the following `sargon.json` file:
+
+```json
+{
+    "PidFile":"/var/run/sargon.pid",
+    "LdapConf":"/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf",
+    "AnonymousUser":"ANONYMOUS"
+}
+```
+
+In the discussion below we assume you will be using the LDAP database to
+store Sargon ACLs.  If it's not the case and your intent is to keep all ACLs
+in the configuration file and disable LDAP altogether, use the following
+configuration file:
+
+```json
+{
+    "LdapConf":""
+}
+```
+
+(setting `LdapConf` to an empty string disables LDAP).
+
+In this case you can skip the section that follows.
 
 ### Configure the LDAP database
 
@@ -77,7 +122,12 @@ description: root for Sargon (Docker ACL) objects.
 EOF
 ```
 
-Create the default policy entry:
+<a name="default-policy"></a>
+Create the default policy entry.  It's an ACL entry that will be used
+when no other object matches the request.  The built-in Sargon
+defaults are very (perhaps even overly) strict, that's why such an
+entry is needed so that you can continue using docker while building
+and tuning your ACLs:
 
 ```sh
 ldapadd <<EOF
@@ -92,10 +142,55 @@ EOF
 
 (don't forget to replace `dc=example,dc=org` with your actual base dn.)
 
-The default policy allows anonymous users to issue any docker
-requests.  The `sargonOrder` attribute ensures it will be placed at
+This entry allows anonymous users to issue any docker requests.  The
+`sargonOrder` attribute ensures it will be placed at 
 the end of the [constructed access control list](#user-content-request-processing).
 
+Of course it is only a minimal example.  You can modify this entry as
+needed or even remove it altogether.
+
+An alternative to keeping the default in the LDAP database is storing it
+in the configuration file.
+
+### Storing ACLs in the configuration file
+
+If you prefer to keep the default policy entry, or even entire ACL, in
+the configuration file, use the `ACL` attribute.  The value of this
+attribute is a list of access control entries stored as JSON object.
+For example, the default policy discussed above is stored in the
+configuration file as:
+
+```json
+{
+    "ACL":[
+      {
+          "Id":"default policy",
+	  "User":"ANONYMOUS",
+	  "Allow":["ALL"],
+	  "Order":100
+      }
+    ]
+}
+```
+
+The rules for converting ACL objects from LDAP to JSON are:
+
+1. Replace `cn` attribute with `Id`.
+2. Replace each `sargon*` attribute with its name without the `sargon`
+   prefix.  E.g. `sargonUser` becomes `User`, etc.  Notice that LDAP
+   attribute names are case-insensitive, whereas JSON attribute names
+   aren't.  Use the [canonical attribute names](#user-content-acls)
+   when performing conversion.
+3. Use scalar value if attribute is marked as _(single)_ in the
+   [attribute list](#user-content-acls), otherwise use array.
+4. Upper-case `TRUE` and `FALSE` become lower-case (e.g. for
+   the [`sargonAllowPrivileged`](#user-content-sargonAllowPrivileged)
+   attribute).
+5. Ensure proper ordering of objects in the `ACL` array, either by
+   using `Order` attributes or by explicitly ordering the entries.
+   Remember that Sargon will use the first entry that matches the
+   request.
+   
 ### Configure Docker to use Sargon
 
 Add the following option to your `dockerd` command line:
@@ -208,6 +303,7 @@ The following options are recognized:
   `/etc/docker/sargon.json`
 
 * `-t`, `--trace`
+
   Trace ACL entries and their effect.
 
 * `-d`, `--debug`
@@ -217,6 +313,10 @@ The following options are recognized:
 * `-h`, `--help`
 
   Produce a short command line usage summary and exit.
+
+* `-v`, `--version`
+
+  Print program version, short copying information, and exit.
 
 ## Configuration  
 
@@ -230,8 +330,10 @@ The following keywords are recognized:
 * `LdapConf`
 
   Colon-separated list of LDAP configuration files to look for. The first of
-  them that exists will be read. Default is
+  them that exists will be read. The default is
   `/etc/ldap.conf:/etc/ldap/ldap.conf:/etc/openldap/ldap.conf`
+
+  To disable LDAP, set this attribute to an empty string.
 
 * `LdapUser`
 
@@ -253,6 +355,12 @@ The following keywords are recognized:
 
   If docker connection is not authenticated, use this string as the user name.
 
+* `ACL`
+
+  A list of ACL entries stored in [JSON format](#user-content-storing-acls-in-the-configuration-file).  This list will be appended to the list [obtained from LDAP](#user-content-acls)
+  before final sorting of entries, or used alone if LDAP database is
+  disabled or is unreachable. This makes it useful for storing [default policies](#user-content-default-policy).
+  
 ## The `ldap.conf` file
 
 After reading its main configuration file, *sargon* scans the LDAP
@@ -355,15 +463,8 @@ with _(single)_, multiple attribute instances are allowed.
 * `sargonMount`
 
   Name of the directory on the host filesystem that is allowed for
-  mounting inside a container.
-
-  If the name ends with `/*` only subdirectories of this directory can be
-  mounted.
-
-  If the directory name (with optional `/*` suffix) is followed by the
-  string `(ro)`, only read-only mounting will be allowed.
-
-  Prior to use, values of this attribute undergo variable expansion: any
+  mounting inside a container.  The value of this attribute is treated
+  as a _globbing pattern_.  Before use, it undergoes _variable expansion_: any
   variable references in form `$`_V_ or `${`_V_`}` are replaced with the
   actual value of variable _V_. The following variables are defined:
 
@@ -376,6 +477,55 @@ with _(single)_, multiple attribute instances are allowed.
 
   Undefined variables are left unexpanded.
 
+  For example:
+
+  * `sargonMount:/var/lib/mounts`
+
+    Allow to mount only `/var/lib/mounts`
+
+  * `sargonMount:/var/lib/mounts/*`
+
+    Allow to mount any directories under `/var/lib/mounts`
+
+  The value can end with a list of _flags_ in parentheses.  The
+  following flags are recognized:
+
+  * `ro`
+
+    Allow read-only mounting.  Attempts to mount the directory for
+    writing will be rejected.
+
+  * `globlex`
+  
+    Use _lexical globbing_: the `*` wildcard matches any sequence of
+    characters, including directory separators (slashes) and the `?`
+    wildcard matches any character, including slash.  This is the
+    default.
+
+  * `globpath`
+
+    Use _pathname globbing_: `*` and `?` don't match slash.
+
+  * `globstar`
+
+    Use _star globbing_.  As with `globpath` neither `*` nor `?` will
+    match a slash character.  The `**` wildcard is provided, which
+    matches zero or more arbitrary characters, including slashes.
+
+  Some more examples:
+
+  * `sargonMount:/var/lib/mounts/*(ro,globpath)`
+
+    Allow to mount only subdirectories of `/var/lib/mounts` and only
+    for reading.
+
+  * `sargonMount:/var/*/mounts/**(globstar)`
+
+    Allow to mount directories located at any depth under the `mounts`
+    directory in any subdirectory of `/var`.  Thus, mounting
+    `/var/lib/mounts/foo/bar` will be allowed, whereas mounting
+    `/var/lib/sub/mounts/foo/bar` will not.
+  
 <a name="sargonAllowPrivileged"></a>
 * `sargonAllowPrivileged` _(single)_
 
@@ -414,87 +564,6 @@ with _(single)_, multiple attribute instances are allowed.
   A timestamp in the form `yyyymmddHHMMSSZ` that provides an expiration
   date/time after which this entry ceases to be valid. Notice, that the
   timestamp must be in UTC.
-
-<a name="request-processing"></a>
-When verifying each incoming request, *sargon* uses the following
-algorithm:
-
-1. Create LDAP filter with the user name and the names of the groups the
-   user belongs to.
-   For example, if the requesting user name is `smt`, and this user is
-   member of the groups `staff`, `docker`, and `wheel`, then the LDAP
-   filter will be:
-
-```text
-      (&(objectClass=sargonACL)
-        (|(sargonUser=smt)
-          (sargonUser=ALL)
-          (sargonUser=%staff)
-          (sargonUser=%docker)
-          (sargonUser=%wheel)))
-```	  
-
-   Notice, that (1) the filter string is split in multiple indented lines
-   for readability, and (2) the filter normally contains conditions that
-   control validity of the entry using the [`sargonNotBefore`](#user-content-sargonNotBefore) and
-   `sargonNotAfter` attributes. These conditions are omitted for clarity.
-
-2. Execute LDAP query, get the response.
-
-3. Iterate over the returned `sargonACL` objects, selecting only those
-   with the value of [`sargonHost`](#user-content-sargonHost)
-   attribute matching the server hostname, or (if the value starts
-   with `+`) with the netgroup that matches the `(host,user,domain)` triplet.
-
-   To match the netgroup, the libc function [innetgr(3)](http://man7.org/linux/man-pages/man3/setnetgrent.3.html) is used.
-
-4. Sort the remaining entries by the value of their
-   [`sargonOrder`](#user-content-sargonOrder) attribute in ascending order.
-
-5. Start with the first returned object.
-
-6. If the requested docker action is explicitly listed in one of its
-   [`sargonAllow`](#user-content-sargonAllow) attributes, go to step 9.
-
-7. Otherwise, if the object has one or more
-   [`sargonDeny`](#user-content-sargonDeny) attributes and one of
-   these contains the requested action or the meta-action `ALL`,
-   then deny the request.
-
-8. Advance to the next object, and restart from step 6.
-
-9. Unless the requested action is `ContainerCreate` or `VolumeCreate`,
-   authorize the request.
-
-10. For `VolumeCreate` requests, check if the requested mountpoint
-    satisfies the [`sargonMount`](#user-content-sargonMount)
-    attribute.  Authorize the request is so and reject it otherwise.
-
-The steps below are followed when processing `ContainerCreate` requests
- 
-11. If creation of a privileged container is requested, consult the 
-    [`sargonAllowPrivileged`](#user-content-sargonAllowPrivileged)
-    attribute. If its value is `FALSE`, deny the request. Otherwise,
-    advance to the next step.
-
-12. If any additional linux capabilities are requested, check if all of
-    them are listed in [`sargonAllowCapability`](#user-content-sargonAllowCapability)
-    attributes. If not, deny the request.
-
-13. Check the requested binds and mounts. Check each source directory against
-    each [`sargonMount`](#user-content-sargonMount) attribute.  If the
-    directory matches the attribute exactly, or if the attribute value
-    ends with a `/*` and the source directory prefix matches the
-    value, then the mount is allowed. Otherwise, the request is denied,
-
-14. If the requested maximum memory is greater than the value of the
-    [`sargonMaxMemory`](#user-content-sargonMaxMemory) attribute, the request is denied.
-
-15. If the requested maximum kernel memory is greater than the value of the
-    [`sargonMaxKernelMemory`](#user-content-sargonMaxKernelMemory)
-    attribute, the request is denied.
-
-16. Otherwise, the request is authorized.
 
 ## Actions
 
@@ -814,5 +883,87 @@ The following values can be used in `sargonAllow` and `sargonDeny` attributes:
 
 * `VolumePrune`
   Delete unused volumes.
+
+## Request processing
+
+When authorizing incoming requests, *sargon* uses the following
+algorithm:
+
+1. Create LDAP filter with the user name and the names of the groups the
+   user belongs to.
+   For example, if the requesting user name is `smt`, and this user is
+   member of the groups `staff`, `docker`, and `wheel`, then the LDAP
+   filter will be:
+
+```text
+      (&(objectClass=sargonACL)
+        (|(sargonUser=smt)
+          (sargonUser=ALL)
+          (sargonUser=%staff)
+          (sargonUser=%docker)
+          (sargonUser=%wheel)))
+```	  
+
+   Notice, that (1) the filter string is split in multiple indented lines
+   for readability, and (2) the filter normally contains conditions that
+   control validity of the entry using the [`sargonNotBefore`](#user-content-sargonNotBefore) and
+   `sargonNotAfter` attributes. These conditions are omitted for clarity.
+
+2. Execute LDAP query, get the response.
+
+3. Iterate over the returned `sargonACL` objects, selecting only those
+   with the value of [`sargonHost`](#user-content-sargonHost)
+   attribute matching the server hostname, or (if the value starts
+   with `+`) with the netgroup that matches the `(host,user,domain)` triplet.
+
+   To match the netgroup, the libc function [innetgr(3)](http://man7.org/linux/man-pages/man3/setnetgrent.3.html) is used.
+
+4. Sort the remaining entries by the value of their
+   [`sargonOrder`](#user-content-sargonOrder) attribute in ascending order.
+
+5. Start with the first returned object.
+
+6. If the requested docker action is explicitly listed in one of its
+   [`sargonAllow`](#user-content-sargonAllow) attributes, go to step 9.
+
+7. Otherwise, if the object has one or more
+   [`sargonDeny`](#user-content-sargonDeny) attributes and one of
+   these contains the requested action or the meta-action `ALL`,
+   then deny the request.
+
+8. Advance to the next object, and restart from step 6.
+
+9. Unless the requested action is `ContainerCreate` or `VolumeCreate`,
+   authorize the request.
+
+10. For `VolumeCreate` requests, check if the requested mountpoint
+    satisfies the [`sargonMount`](#user-content-sargonMount)
+    attribute.  Authorize the request is so and reject it otherwise.
+
+The steps below are followed when processing `ContainerCreate` requests
+ 
+11. If creation of a privileged container is requested, consult the 
+    [`sargonAllowPrivileged`](#user-content-sargonAllowPrivileged)
+    attribute. If its value is `FALSE`, deny the request. Otherwise,
+    advance to the next step.
+
+12. If any additional linux capabilities are requested, check if all of
+    them are listed in [`sargonAllowCapability`](#user-content-sargonAllowCapability)
+    attributes. If not, deny the request.
+
+13. Check the requested binds and mounts. Check each source directory against
+    each [`sargonMount`](#user-content-sargonMount) attribute.  If the
+    directory matches the attribute exactly, or if the attribute value
+    ends with a `/*` and the source directory prefix matches the
+    value, then the mount is allowed. Otherwise, the request is denied,
+
+14. If the requested maximum memory is greater than the value of the
+    [`sargonMaxMemory`](#user-content-sargonMaxMemory) attribute, the request is denied.
+
+15. If the requested maximum kernel memory is greater than the value of the
+    [`sargonMaxKernelMemory`](#user-content-sargonMaxKernelMemory)
+    attribute, the request is denied.
+
+16. Otherwise, the request is authorized.
 
 
