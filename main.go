@@ -13,23 +13,33 @@ import (
 	"sargon/server"
 )
 
+var Version = `1.90`
+var CopyleftText = `Copyright (C) 2022 Sergey Poznyakoff
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+`
+
 func main() {
+	program := filepath.Base(os.Args[0])
 	config_file := "/etc/docker/sargon.json"
         foreground := false
 	debug_mode := false
 	trace_mode := false
 	help_mode := false
+	version_mode := false
 	diag_flags := 0
 
 	optset := getopt.New()
-	optset.SetProgram(filepath.Base(os.Args[0]))
+	optset.SetProgram(program)
 	optset.SetParameters("")
 	optset.FlagLong(&foreground, "foreground", 'f', "remain in foreground")
 	optset.FlagLong(&debug_mode, "debug", 'd', "verbose debugging")
 	optset.FlagLong(&trace_mode, "trace", 't', "enable trace output")
 	optset.FlagLong(&config_file, "config", 'c', "read this configuration file")
 	optset.FlagLong(&help_mode, "help", 'h', "display this help summary")
-
+	optset.FlagLong(&version_mode, "version", 'v', "display program version")
+	
 	if err := optset.Getopt(os.Args, nil); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		optset.PrintUsage(os.Stderr)
@@ -40,7 +50,12 @@ func main() {
 		optset.PrintUsage(os.Stdout)
 		os.Exit(0)
 	}
-
+	if version_mode {
+		fmt.Fprintf(os.Stdout, "%s (sargon) %s\n", program, Version)
+		fmt.Fprint(os.Stdout, CopyleftText)
+		os.Exit(0)
+	}
+	
 	if debug_mode {
 		diag_flags |= diag.LogFlagDebug
 	}

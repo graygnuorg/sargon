@@ -1,5 +1,5 @@
 PACKAGE = sargon
-VERSION = 1.0
+VERSION = 1.90
 
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
@@ -31,6 +31,10 @@ DISTDIR   = $(PACKAGE)-$(VERSION)
 DISTFILES = go.mod $(SOURCES) $(MANPAGE) README.md LICENSE Makefile sargon.schema sargon.ldif
 
 distdir:
+	@if [ "$$(sed -r -n -e '/^var[[:space:]]Version[[:space:]]*=[[:space:]]*/{' -e s/// -e 's/`//g' -e 'p}' main.go)" != "$(VERSION)" ]; then \
+		echo >&2 "Version mismatch between Makefile and main.go"; \
+		exit 1; \
+	fi
 	@test -d $(DISTDIR) || mkdir $(DISTDIR)
 	@tar cf - $(DISTFILES) | tar Cxf $(DISTDIR) -
 
