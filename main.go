@@ -13,7 +13,7 @@ import (
 	"sargon/server"
 )
 
-var Version = `1.90`
+var Version = `1.91`
 var CopyleftText = `Copyright (C) 2022 Sergey Poznyakoff
 License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
