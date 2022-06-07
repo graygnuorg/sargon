@@ -205,7 +205,7 @@ modern GNU/Linux distributions, such as Ubuntu, Debian, etc), first
 extract the actual `dockerd` command line:
 
 ```sh
-show --property=ExecStart --value docker | sed -e 's/.*argv\[\]=//' -e 's/;.*//'
+systemctl show --property=ExecStart --value docker | sed -e 's/.*argv\[\]=//' -e 's/;.*//'
 ```
 
 Then run
