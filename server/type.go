@@ -1,6 +1,8 @@
 package server
 
 import (
+	"os"
+	"errors"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -19,11 +21,11 @@ type Sargon struct {
 
 func (srg *Sargon) ReadConfig(f string) {
 	raw, err := ioutil.ReadFile(f)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	err = json.Unmarshal(raw, srg)
-	if err != nil {
+	if err == nil {
+		if err = json.Unmarshal(raw, srg); err != nil {
+			log.Fatalln(err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
 		log.Fatalln(err)
 	}
 }
