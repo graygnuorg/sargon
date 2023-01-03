@@ -122,6 +122,7 @@ func (wm *wildMat) Match() int {
 							if wm.name[wm.nameIdx] == '/' {
 								return wildFalse
 							}
+							wm.nameIdx += 1
 						}
 						return wildTrue
 					}
