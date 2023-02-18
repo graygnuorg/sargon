@@ -16,7 +16,7 @@ require (
 	github.com/pborman/getopt/v2 v2.1.0
 	github.com/sevlyar/go-daemon v0.1.5
 	github.com/stretchr/testify v1.7.1 // indirect
-	golang.org/x/sys v0.0.0-20220330033206-e17cdc41300f // indirect
+	golang.org/x/net v0.7.0 // indirect
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/ldap.v2 v2.5.1
 	gotest.tools/v3 v3.2.0 // indirect
