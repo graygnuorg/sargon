@@ -193,16 +193,23 @@ The rules for converting ACL objects from LDAP to JSON are:
    
 ### Configure Docker to use Sargon
 
-Add the following option to your `dockerd` command line:
+Add the following attribute to the file `/etc/docker/daemon.json`:
+
+```json
+ "authorization-plugins": ["sargon"]
+```
+
+Otherwise, add the following option to your `dockerd` command line:
 
 ```sh
   --authorization-plugin=sargon
 ```
 
-The exact place for it depends on how `dockerd` is started on your
-system.  If your system uses `systemd` (which is the case for most
-modern GNU/Linux distributions, such as Ubuntu, Debian, etc), first
-extract the actual `dockerd` command line:
+If you opt for the latter variant, the exact place where to apply it
+depends on how `dockerd` is started on your system.  If your system
+uses `systemd` (which is the case for most modern GNU/Linux
+distributions, such as Ubuntu, Debian, etc), first extract the actual
+`dockerd` command line:
 
 ```sh
 systemctl show --property=ExecStart --value docker | sed -e 's/.*argv\[\]=//' -e 's/;.*//'
@@ -949,9 +956,7 @@ The steps below are followed when processing `ContainerCreate` requests
 
 13. Check the requested binds and mounts. Check each source directory against
     each [`sargonMount`](#user-content-sargonMount) attribute.  If the
-    directory matches the attribute exactly, or if the attribute value
-    ends with a `/*` and the source directory prefix matches the
-    value, then the mount is allowed. Otherwise, the request is denied,
+    directory matches, mounting is allowed. Otherwise, deny the request.
 
 14. If the requested maximum memory is greater than the value of the
     [`sargonMaxMemory`](#user-content-sargonMaxMemory) attribute, the request is denied.
