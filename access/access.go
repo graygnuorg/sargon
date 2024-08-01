@@ -18,7 +18,7 @@ type ACE struct {
 	Allow []string
 	Deny []string
 	Mount []string
-	AllowPriv *bool
+	AllowPrivileged *bool
 	MaxMemory *int64
 	MaxKernelMemory *int64
 	AllowCapability []string
@@ -100,10 +100,10 @@ func (acl ACL) ActionIsAllowed(action string) (bool, string) {
 }
 
 func (ace ACE) CreatePrivilegedIsAllowed() EvalResult {
-	if ace.AllowPriv == nil {
+	if ace.AllowPrivileged == nil {
 		return undef
 	}
-	if *ace.AllowPriv {
+	if *ace.AllowPrivileged {
 		return accept
 	}
 	return reject

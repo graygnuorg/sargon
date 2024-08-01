@@ -135,8 +135,8 @@ func LdapEntryToACE(entry *ldap.Entry) access.ACE {
 		case `sargonMount`:
 			ace.Mount = attr.Values
 		case `sargonAllowPrivileged`:
-			ace.AllowPriv = new(bool)
-			*ace.AllowPriv = attr.Values[0] == "TRUE"
+			ace.AllowPrivileged = new(bool)
+			*ace.AllowPrivileged = attr.Values[0] == "TRUE"
 		case `sargonMaxMemory`:
 			n, err := access.ConvSize(attr.Values[0])
 			if err == nil {
