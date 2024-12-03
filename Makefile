@@ -9,6 +9,7 @@ SOURCES = \
  access/access.go\
  auth/container_create.go\
  auth/volume_create.go\
+ auth/service_create.go\
  diag/diag.go\
  server/action.go\
  server/authz.go\
