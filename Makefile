@@ -1,5 +1,5 @@
 PACKAGE = sargon
-VERSION = 1.91
+VERSION = 2.1
 
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
