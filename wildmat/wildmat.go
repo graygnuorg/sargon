@@ -27,7 +27,7 @@ func (wm *wildMat) endOfPattern() bool {
 }
 
 func (wm *wildMat) patternNext() bool {
-	wm.patternIdx += 1
+	wm.patternIdx++
 	return !wm.endOfPattern()
 }
 
@@ -87,7 +87,7 @@ func (wm *wildMat) matchClass() int {
 			wm.patternIdx += 3
 		} else {
 			rc = wm.pattern[wm.patternIdx] == c
-			wm.patternIdx += 1
+			wm.patternIdx++
 		}
 
 	}
@@ -122,7 +122,7 @@ func (wm *wildMat) Match() int {
 							if wm.name[wm.nameIdx] == '/' {
 								return wildFalse
 							}
-							wm.nameIdx += 1
+							wm.nameIdx++
 						}
 						return wildTrue
 					}
@@ -138,6 +138,7 @@ func (wm *wildMat) Match() int {
 						if wm.name[wm.nameIdx] == '/' {
 							return wildFalse
 						}
+						wm.nameIdx++
 					}
 					return wildTrue
 				} else if wm.pattern[wm.patternIdx] == '*' {
@@ -152,14 +153,19 @@ func (wm *wildMat) Match() int {
 
 			for !wm.endOfName() {
 				if !matchSlash && wm.name[wm.nameIdx] == '/' {
-					break
+					if wm.pattern[wm.patternIdx] == '/' && wm.patternNext() {
+						wm.nameIdx++
+						continue
+					} else {
+						break
+					}
 				}
 
 				nwm := *wm
 				if res := (&nwm).Match(); res != wildFalse {
 					return res
 				}
-				wm.nameIdx += 1
+				wm.nameIdx++
 			}
 			return wildAbort
 
@@ -167,14 +173,14 @@ func (wm *wildMat) Match() int {
 			if wm.glob != GlobLex && wm.name[wm.nameIdx] == '/' {
 				return wildFalse
 			}
-			wm.patternIdx += 1
-			wm.nameIdx += 1
+			wm.patternIdx++
+			wm.nameIdx++
 
 		case '[':
 			if res := wm.matchClass(); res != wildTrue {
 				return res
 			}
-			wm.nameIdx += 1
+			wm.nameIdx++
 
 		case '\\':
 			if wm.patternIdx + 1 < wm.patternLen {
@@ -201,7 +207,7 @@ func (wm *wildMat) Match() int {
 					return wildFalse
 				}
 
-				wm.nameIdx += 1
+				wm.nameIdx++
 				break
 			}
 			fallthrough
@@ -210,8 +216,8 @@ func (wm *wildMat) Match() int {
 			if wm.pattern[wm.patternIdx] != wm.name[wm.nameIdx] {
 				return wildFalse
 			}
-			wm.patternIdx += 1
-			wm.nameIdx += 1
+			wm.patternIdx++
+			wm.nameIdx++
 		}
 	}
 	if wm.endOfName() {
