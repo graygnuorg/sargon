@@ -85,7 +85,8 @@ func main() {
 
 		d, err := ctx.Reborn()
 		if err != nil {
-			diag.Error("can't go daemon: ", err)
+			diag.Error("can't go daemon: %v", err)
+			os.Exit(1)
 		}
 		if d != nil {
 			return

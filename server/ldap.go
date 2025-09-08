@@ -234,7 +234,7 @@ func FilterLdapEntriesToACL(entries []*ldap.Entry, username string) access.ACL {
 				ExpandUser(&t, usr)
 			}
 			acl[i] = t
-			i += 1
+			i++
 		}
 	}
 	return acl[0:i]
