@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"errors"
+	"net/url"
 	"sargon/diag"
 	"sargon/access"
 )
@@ -23,7 +24,7 @@ import (
 var (
 	commentRe = regexp.MustCompile(`^\s*#`)
 	settingRe = regexp.MustCompile(`^\s*(\S+)\s+(.+)$`)
-	ldapURIRe = regexp.MustCompile(`^(ldap[is]?)://((.+?)(?::(.+))?)$`)
+	ldapURIRe = regexp.MustCompile(`^(ldap[is]?)://((.+?)(?::(.+))?)?$`)
 )
 
 type LdapConfig map[string]string
@@ -59,12 +60,13 @@ func (lcf LdapConfig) ReadPath(path string) (err error) {
 	return
 }
 
-func uriToNetAddr(uri string) (net, address string, ssl bool) {
+func uriToNetAddr(uri string) (net, address string, ssl bool, err error) {
 	if (uri == "") {
 		net = "tcp"
 		address = "127.0.0.1:389"
 	} else if res := ldapURIRe.FindStringSubmatch(uri); res != nil {
-		if (res[1] == `ldap`) {
+		switch res[1] {
+		case `ldap`:
 			var port string
 			if res[4] != "" {
 				port = res[4]
@@ -72,8 +74,13 @@ func uriToNetAddr(uri string) (net, address string, ssl bool) {
 				port = "389"
 			}
 			net = "tcp"
-			address = res[3] + ":" + port
-		} else if (res[1] == `ldaps`) {
+			host := res[3]
+			if host == `` {
+				host = `127.0.0.1`
+			}
+			address = host + ":" + port
+
+		case `ldaps`:
 			var port string
 			if res[4] != "" {
 				port = res[4]
@@ -81,12 +88,26 @@ func uriToNetAddr(uri string) (net, address string, ssl bool) {
 				port = "639"
 			}
 			net = "tcp"
-			address = res[3] + ":" + port
+			host := res[3]
+			if host == `` {
+				host = `127.0.0.1`
+			}
+			address = host + ":" + port
 			ssl = true
-		} else if (res[1] == `ldapi`) {
+
+		case `ldapi`:
 			net = "unix"
-			address = res[2]
+			if res[2] == `` {
+				address = `/var/run/slapd/ldapi`
+			} else {
+				address, err = url.PathUnescape(res[2])
+			}
+
+		default:
+			err = fmt.Errorf("Unsupported LDAP scheme: %s", res[1])
 		}
+	} else {
+		err = fmt.Errorf("Unrecognized LDAP URI: %s", uri)
 	}
 	return
 }
@@ -345,9 +366,9 @@ func (srg *Sargon) FindUserLdap (username string) (access.ACL, error) {
 		return nil, err
 	}
 
-	net, addr, ssl := uriToNetAddr(cf[`uri`])
-	if net == "" {
-		diag.Error("can't parse URI\n")
+	net, addr, ssl, err := uriToNetAddr(cf[`uri`])
+	if err != nil {
+		diag.Error("can't parse URI: %v\n", err)
 		return nil, errors.New("invalid LDAP URI")
 	}
 
@@ -362,7 +383,7 @@ func (srg *Sargon) FindUserLdap (username string) (access.ACL, error) {
 	}
 
 	if err != nil {
-		diag.Error("can't connect to LDAP: %s\n", err.Error())
+		diag.Error("can't connect to LDAP: %v\n", err)
 		return nil, err
 	}
 	defer l.Close()
@@ -372,7 +393,7 @@ func (srg *Sargon) FindUserLdap (username string) (access.ACL, error) {
 
 		err := l.StartTLS(tlsconf)
 		if err != nil {
-			diag.Error("can't start TLS session: %s\n", err.Error())
+			diag.Error("can't start TLS session: %v\n", err)
 			return nil, err
 		}
 	}
@@ -388,9 +409,9 @@ func (srg *Sargon) FindUserLdap (username string) (access.ACL, error) {
 			if err == nil {
 				passwd = string(pw)
 			} else {
-				diag.Error("can't read password file %s: %s\n",
+				diag.Error("can't read password file %s: %v\n",
 					pwfile,
-					err.Error())
+					err)
 				return nil, err
 			}
 		}
@@ -398,7 +419,7 @@ func (srg *Sargon) FindUserLdap (username string) (access.ACL, error) {
 
 	err = l.Bind(user, passwd)
 	if err != nil {
-		diag.Error("can't bind as %s: %s\n", srg.LdapUser, err.Error())
+		diag.Error("can't bind as %s: %v\n", srg.LdapUser, err)
 		return nil, err
 	}
 
@@ -466,7 +487,7 @@ func (srg *Sargon) FindUserLdap (username string) (access.ACL, error) {
 		nil)
 	sr, err := l.Search(req)
 	if err != nil {
-		diag.Error("search request failed: %s\n", err.Error())
+		diag.Error("search request failed: %v\n", err)
 		return nil, err
 	}
 
